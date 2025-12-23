@@ -1,32 +1,172 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
+import '../data/level_data.dart';
 import 'teacher_dashboard.dart';
 import 'study_hub_screen.dart';
 import 'arena_screen.dart';
+import 'revision_screen.dart';
+import 'home_screen.dart'; 
+import '../widgets/loading_overlay.dart';
+import 'note_editor_screen.dart';
+import 'login_screen.dart';
+import '../config.dart';
 
-const String baseUrl = 'http://127.0.0.1:5000';
+const String baseUrl = 'https://countryfied-dario-addictively.ngrok-free.dev';
 
 class LobbyScreen extends StatefulWidget {
-  const LobbyScreen({super.key});
+  final String? userEmail; // Nullable for Guest Mode
+  const LobbyScreen({super.key, this.userEmail});
+
   @override
   State<LobbyScreen> createState() => _LobbyScreenState();
 }
 
 class _LobbyScreenState extends State<LobbyScreen> {
-  // Shared Inputs
+  // Input State
   final TextEditingController _notesController = TextEditingController();
   final TextEditingController _youtubeController = TextEditingController();
-  PlatformFile? _selectedFile;
-  int _inputType = 0; // 0=File, 1=YouTube, 2=Text
-
-  // Student Inputs
   final TextEditingController _gameCodeController = TextEditingController();
   final TextEditingController _studentNameController = TextEditingController();
-  
+  final TextEditingController _homeInputController = TextEditingController();
+
+  PlatformFile? _selectedFile;
+  int _selectedInputTab = 0;
+  int _mainTab = 0; 
   bool _isLoading = false;
+  
+  // Records State
+  List<dynamic> _records = [];
+  bool _loadingRecords = false;
+  
+  // Theme State
+  bool _isDarkMode = false; // Default to Light Mode as requested
+
+  List<GameLevel> _levels = generateLevels();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.userEmail != null) {
+      _fetchRecords();
+    }
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    _youtubeController.dispose();
+    _gameCodeController.dispose();
+    _studentNameController.dispose();
+    _homeInputController.dispose();
+    super.dispose();
+  }
+
+  // --- RECORD MANAGEMENT ---
+  Future<void> _fetchRecords() async {
+    if (widget.userEmail == null) return;
+    setState(() => _loadingRecords = true);
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/get-records'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': widget.userEmail}),
+      );
+      if (response.statusCode == 200) {
+        setState(() => _records = jsonDecode(response.body));
+      }
+    } catch (e) {
+      debugPrint("Error fetching records: $e");
+    } finally {
+      if (mounted) setState(() => _loadingRecords = false);
+    }
+  }
+
+  // --- NAVIGATION & MENU ---
+  void _login() {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+  }
+
+  void _logout() {
+    Navigator.pushAndRemoveUntil(
+      context, 
+      MaterialPageRoute(builder: (context) => const LobbyScreen(userEmail: null)),
+      (route) => false
+    );
+  }
+
+  void _showUserMenu(bool isGuest) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _isDarkMode ? const Color(0xFF2D2B42) : Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40, height: 4, 
+                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                margin: const EdgeInsets.only(bottom: 20),
+              ),
+              // User Info
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: isGuest ? Colors.grey : const Color(0xFF6C63FF),
+                  child: Icon(isGuest ? Icons.person : Icons.check, color: Colors.white),
+                ),
+                title: Text(isGuest ? "Guest User" : (widget.userEmail ?? "User"), 
+                  style: TextStyle(fontWeight: FontWeight.bold, color: _isDarkMode ? Colors.white : Colors.black87)),
+                subtitle: Text(isGuest ? "Sign in to save history" : "Logged in", 
+                  style: TextStyle(color: _isDarkMode ? Colors.white70 : Colors.grey)),
+              ),
+              const Divider(),
+              // Theme Toggle
+              SwitchListTile(
+                title: Text("Dark Mode", style: TextStyle(color: _isDarkMode ? Colors.white : Colors.black87)),
+                secondary: Icon(Icons.dark_mode, color: _isDarkMode ? Colors.white : Colors.grey),
+                value: _isDarkMode,
+                activeColor: const Color(0xFF6C63FF),
+                onChanged: (val) {
+                  setState(() => _isDarkMode = val);
+                  Navigator.pop(context); // Close menu to apply/refresh
+                },
+              ),
+              const Divider(),
+              // Action (Login/Logout)
+              ListTile(
+                leading: Icon(isGuest ? Icons.login : Icons.logout, color: isGuest ? Colors.green : Colors.redAccent),
+                title: Text(isGuest ? "Log In" : "Log Out", 
+                  style: TextStyle(color: isGuest ? Colors.green : Colors.redAccent, fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(context);
+                  isGuest ? _login() : _logout();
+                },
+              ),
+            ],
+          ),
+        );
+      }
+    );
+  }
+
+  void _openNoteEditor([Map<String, dynamic>? record]) async {
+    if (record != null && widget.userEmail == null) return;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NoteEditorScreen(
+          userEmail: widget.userEmail ?? "guest",
+          existingRecord: record,
+        ),
+      ),
+    );
+    if (widget.userEmail != null) _fetchRecords(); 
+  }
 
   Future<void> _pickFile() async {
     try {
@@ -35,40 +175,45 @@ class _LobbyScreenState extends State<LobbyScreen> {
     } catch (e) { /* Ignore */ }
   }
 
-  // --- ACTION 1: SELF STUDY ---
-  Future<void> _startSelfStudy() async {
-    String notesToSend = "";
-    String youtubeUrlToSend = "";
-    PlatformFile? fileToSend;
-
-    // Only take data from the ACTIVE tab
-    if (_inputType == 2) notesToSend = _notesController.text.trim();
-    if (_inputType == 1) youtubeUrlToSend = _youtubeController.text.trim();
-    if (_inputType == 0) fileToSend = _selectedFile;
-
-    // Navigate directly, passing data. StudyHub handles generation.
-    Navigator.push(context, MaterialPageRoute(builder: (context) => StudyHubScreen(
-      notes: notesToSend,
-      youtubeUrl: youtubeUrlToSend,
-      file: fileToSend,
-    )));
+  Future<void> _startStudy() async {
+    String notes = "";
+    String youtube = "";
+    if (_mainTab == 0) {
+       if (_selectedInputTab == 2) notes = _homeInputController.text.trim();
+       if (_selectedInputTab == 1) youtube = _homeInputController.text.trim();
+    } else {
+       if (_selectedInputTab == 2) notes = _notesController.text.trim();
+       if (_selectedInputTab == 1) youtube = _youtubeController.text.trim();
+    }
+    if (_selectedInputTab == 0 && _selectedFile == null) {
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please upload a file first!"))); return;
+    }
+    if (_selectedInputTab == 1 && youtube.isEmpty) {
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please paste a YouTube link!"))); return;
+    }
+    if (_selectedInputTab == 2 && notes.isEmpty) {
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter some notes!"))); return;
+    }
+    setState(() => _isLoading = true);
+    await Future.delayed(const Duration(seconds: 2));
+    setState(() => _isLoading = false);
+    if (mounted) {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => StudyHubScreen(notes: notes, youtubeUrl: youtube, file: _selectedFile)));
+    }
   }
-
-  // --- ACTION 2: TEACHER HOST ---
+  
   Future<void> _hostGame() async {
     setState(() => _isLoading = true);
     try {
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/host-game'));
-      
-      // Add data based on input type
-      if (_inputType == 2) request.fields['notes'] = _notesController.text.trim();
-      if (_inputType == 1) request.fields['youtube_url'] = _youtubeController.text.trim();
-      if (_inputType == 0 && _selectedFile != null) {
-        if (kIsWeb && _selectedFile!.bytes != null) {
-          request.files.add(http.MultipartFile.fromBytes('file', _selectedFile!.bytes!, filename: _selectedFile!.name));
-        } else if (_selectedFile!.path != null) {
-          request.files.add(await http.MultipartFile.fromPath('file', _selectedFile!.path!));
-        }
+      if (_selectedInputTab == 2) request.fields['notes'] = _notesController.text.trim();
+      if (_selectedInputTab == 1) request.fields['youtube_url'] = _youtubeController.text.trim();
+      if (_selectedInputTab == 0 && _selectedFile != null) {
+         if (_selectedFile!.bytes != null) {
+            request.files.add(http.MultipartFile.fromBytes('file', _selectedFile!.bytes!, filename: _selectedFile!.name));
+          } else if (_selectedFile!.path != null) {
+            request.files.add(await http.MultipartFile.fromPath('file', _selectedFile!.path!));
+          }
       }
 
       var response = await http.Response.fromStream(await request.send());
@@ -83,7 +228,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
     } finally { setState(() => _isLoading = false); }
   }
 
-  // --- ACTION 3: STUDENT JOIN ---
   Future<void> _joinGame() async {
     setState(() => _isLoading = true);
     try {
@@ -108,136 +252,341 @@ class _LobbyScreenState extends State<LobbyScreen> {
     } finally { setState(() => _isLoading = false); }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text("NOTE 2 QUIZ"),
-          bottom: const TabBar(tabs: [
-            Tab(text: "SELF STUDY", icon: Icon(Icons.school)),
-            Tab(text: "TEACHER", icon: Icon(Icons.cast_for_education)),
-            Tab(text: "STUDENT", icon: Icon(Icons.group_add)),
-          ]),
-        ),
-        body: TabBarView(
-          children: [
-            // TAB 1: SELF STUDY (Uses Shared Input UI)
-            _buildInputLayout(
-              title: "Start Your Revision",
-              buttonText: "GENERATE STUDY HUB",
-              onPressed: _startSelfStudy,
-              color: const Color(0xFF6C63FF),
-            ),
+  Future<void> _startLevel(GameLevel level) async {
+    setState(() => _isLoading = true);
+    try {
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/generate-notes'));
+      
+      String prompt = "Create a concise, bullet-point revision summary about: ${level.topic}. Focus on key facts relevant for a quiz.";
+      request.fields['notes'] = prompt;
 
-            // TAB 2: TEACHER HOST (Uses Shared Input UI)
-            _buildInputLayout(
-              title: "Host a Live Game",
-              buttonText: "GENERATE & HOST",
-              onPressed: _hostGame,
-              color: Colors.orangeAccent,
-            ),
+      var response = await http.Response.fromStream(await request.send());
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final notes = data['notes'];
+        
+        if (mounted) {
+          final bool? victory = await Navigator.push(
+            context, 
+            MaterialPageRoute(builder: (context) => RevisionScreen(
+              topic: level.topic,
+              notes: notes,
+              level: level.level,
+              isBoss: level.isBoss,
+            ))
+          );
 
-            // TAB 3: STUDENT JOIN
-            Center(
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 400),
-                padding: const EdgeInsets.all(30),
-                decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(20)),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text("JOIN GAME", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 30),
-                    TextField(controller: _gameCodeController, decoration: const InputDecoration(labelText: "Game Code (e.g. A1B2)", border: OutlineInputBorder())),
-                    const SizedBox(height: 20),
-                    TextField(controller: _studentNameController, decoration: const InputDecoration(labelText: "Your Nickname", border: OutlineInputBorder())),
-                    const SizedBox(height: 30),
-                    _isLoading ? const CircularProgressIndicator() : SizedBox(
-                      width: double.infinity, height: 50,
-                      child: ElevatedButton(onPressed: _joinGame, style: ElevatedButton.styleFrom(backgroundColor: Colors.green), child: const Text("ENTER ARENA")),
-                    )
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+          if (victory == true) {
+             if (level.level < _levels.length) {
+               setState(() {
+                 int nextLevelIndex = level.level; 
+                 if (nextLevelIndex < _levels.length) {
+                    var old = _levels[nextLevelIndex];
+                    _levels[nextLevelIndex] = GameLevel(
+                      level: old.level,
+                      topic: old.topic,
+                      isBoss: old.isBoss,
+                      isLocked: false 
+                    );
+                 }
+               });
+               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Level Complete! Next level unlocked!"), backgroundColor: Colors.green));
+             } else {
+               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("CONGRATULATIONS! YOU FINISHED ALL LEVELS!"), backgroundColor: Colors.amber));
+             }
+          }
+        }
+      } else {
+        throw "Failed to generate revision notes.";
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Level Error: $e"), backgroundColor: Colors.red));
+    } finally { setState(() => _isLoading = false); }
   }
 
-  // --- REUSABLE INPUT WIDGET (For Self Study & Teacher) ---
-  Widget _buildInputLayout({required String title, required String buttonText, required VoidCallback onPressed, required Color color}) {
-    return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 700),
-        padding: const EdgeInsets.all(30),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
-            
-            // Input Type Tabs
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              _buildInputTypeBtn(0, Icons.cloud_upload, "File"),
-              const SizedBox(width: 10),
-              _buildInputTypeBtn(1, Icons.video_library, "YouTube"),
-              const SizedBox(width: 10),
-              _buildInputTypeBtn(2, Icons.text_fields, "Text"),
-            ]),
-            const SizedBox(height: 20),
+  String _getHeaderTitle() {
+    switch (_mainTab) {
+      case 0: return "AI Study Hub";
+      case 1: return "AI Note Taker";
+      case 2: return "AI Flashcard Maker";
+      case 3: return "AI Quiz Generator";
+      case 4: return "Challenge Map";
+      case 5: return "Teacher Host";
+      case 6: return "Join Live Game";
+      default: return "Note2Quiz";
+    }
+  }
 
-            // Input Area
-            Container(
-              height: 200, // Increased height for better spacing
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(15)),
-              child: _inputType == 0 
-                ? GestureDetector(onTap: _pickFile, child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(_selectedFile == null ? Icons.upload_file : Icons.check_circle, size: 40, color: _selectedFile == null ? Colors.white54 : Colors.green), const SizedBox(height: 10), Text(_selectedFile?.name ?? "Click to Upload PDF/PPTX")])))
-                : _inputType == 1 
-                  ? Center(
+  @override
+  Widget build(BuildContext context) {
+    bool isGuest = widget.userEmail == null;
+    Color bgColor = _isDarkMode ? const Color(0xFF1E1E2E) : const Color(0xFFF5F6FA);
+    Color cardColor = _isDarkMode ? const Color(0xFF2D2B42) : Colors.white;
+    Color textColor = _isDarkMode ? Colors.white : Colors.black87;
+    Color subTextColor = _isDarkMode ? Colors.white54 : Colors.grey[600]!;
+    
+    // Sidebar colors dependent on Theme
+    Color sidebarColor = _isDarkMode ? const Color(0xFF171717) : const Color(0xFFF9F9F9);
+    Color sidebarTextColor = _isDarkMode ? Colors.white : Colors.black87;
+    Color sidebarIconColor = _isDarkMode ? Colors.white : Colors.black54;
+    Color sidebarDividerColor = _isDarkMode ? Colors.white12 : Colors.black12;
+    Color sidebarHoverColor = _isDarkMode ? Colors.white10 : Colors.black12;
+
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: bgColor, 
+          body: Row(
+            children: [
+              // --- SIDEBAR (Adapts to Theme) ---
+              Container(
+                width: 260,
+                color: sidebarColor,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _openNoteEditor(),
+                          icon: Icon(Icons.add, size: 16, color: sidebarTextColor),
+                          label: Text("New chat", style: TextStyle(color: sidebarTextColor)),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: _isDarkMode ? Colors.white24 : Colors.black12),
+                            alignment: Alignment.centerLeft,
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    _buildSidebarItem(Icons.home, "Home", 0, sidebarTextColor, sidebarIconColor, sidebarHoverColor),
+                    _buildSidebarItem(Icons.map, "Challenge Map", 4, sidebarTextColor, sidebarIconColor, sidebarHoverColor),
+                    
+                    Divider(color: sidebarDividerColor),
+
+                    Expanded(
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          TextField(controller: _youtubeController, decoration: const InputDecoration(hintText: "Paste YouTube Link", prefixIcon: Icon(Icons.link))),
-                          const SizedBox(height: 10),
-                          const Text(
-                            "Note: Video MUST have closed captions enabled to extract text.", 
-                            style: TextStyle(color: Colors.white54, fontSize: 12, fontStyle: FontStyle.italic)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text("History", style: TextStyle(color: sidebarIconColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                                if (!isGuest)
+                                  InkWell(onTap: _fetchRecords, child: Icon(Icons.refresh, size: 14, color: sidebarIconColor))
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: isGuest 
+                              ? Padding(padding: const EdgeInsets.all(20.0), child: Text("Sign in to save your history.", style: TextStyle(color: sidebarIconColor.withOpacity(0.5), fontSize: 13)))
+                              : _loadingRecords 
+                                ? Center(child: CircularProgressIndicator(strokeWidth: 2, color: sidebarIconColor))
+                                : ListView.builder(
+                                    padding: EdgeInsets.zero,
+                                    itemCount: _records.length,
+                                    itemBuilder: (context, index) {
+                                      final r = _records[index];
+                                      return InkWell(
+                                        onTap: () => _openNoteEditor(r),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                          child: Row(children: [
+                                              Icon(Icons.chat_bubble_outline, size: 14, color: sidebarIconColor),
+                                              const SizedBox(width: 10),
+                                              Expanded(child: Text(r['title'] ?? "Untitled", style: TextStyle(color: sidebarTextColor, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                          ]),
+                                        ),
+                                      );
+                                    },
+                                  ),
                           ),
                         ],
                       ),
-                    )
-                  : TextField(controller: _notesController, maxLines: 6, decoration: const InputDecoration(hintText: "Paste Notes Here", border: InputBorder.none)),
-            ),
-            const SizedBox(height: 30),
+                    ),
 
-            _isLoading ? const CircularProgressIndicator() : SizedBox(
-              width: double.infinity, height: 50,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.bolt),
-                label: Text(buttonText),
-                onPressed: onPressed,
-                style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white),
+                    Divider(color: sidebarDividerColor),
+
+                    // 4. Bottom User Profile (Click for Settings)
+                    InkWell(
+                      onTap: () => _showUserMenu(isGuest),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        color: Colors.transparent,
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: isGuest ? Colors.grey : const Color(0xFF6C63FF),
+                              child: Icon(isGuest ? Icons.person : Icons.check, size: 16, color: Colors.white),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                isGuest ? "Guest (Settings)" : (widget.userEmail ?? "User"),
+                                style: TextStyle(color: sidebarTextColor, fontWeight: FontWeight.bold, fontSize: 14),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Icon(Icons.more_horiz, color: sidebarIconColor, size: 18)
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            )
-          ],
+
+              // --- MAIN CONTENT AREA ---
+              Expanded(
+                child: _mainTab == 0 
+                ? HomeScreen(
+                    inputController: _homeInputController, 
+                    selectedFile: _selectedFile,
+                    onPickFile: _pickFile,
+                    onStartNoteTaker: () => _switchToTab(1),
+                    onStartFlashcards: () => _switchToTab(2),
+                    onStartQuiz: () => _switchToTab(3),
+                    onStartChallenge: () => _switchToTab(4),
+                    onGenerate: (type) {
+                       setState(() {
+                         _selectedInputTab = type;
+                         if (type == 0) _pickFile(); 
+                         else _startStudy();
+                       });
+                    },
+                  )
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(40),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                         Center(
+                          child: Text(_getHeaderTitle(), style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: textColor)),
+                         ),
+                         const SizedBox(height: 40),
+                         if (_mainTab == 4) _buildChallengeMap(cardColor, textColor)
+                         else if (_mainTab == 6) _buildStudentJoinCard(cardColor, textColor, subTextColor)
+                         else if (_mainTab == 5) Container(child: Text("Teacher Dashboard Triggered via Host Game", style: TextStyle(color: textColor))) 
+                         else _buildGeneratorCard(cardColor, textColor, subTextColor),
+                      ],
+                    ),
+                  ),
+              )
+            ],
+          ),
         ),
+        if (_isLoading) const LoadingOverlay()
+      ],
+    );
+  }
+
+  // --- HELPER UI ---
+  void _switchToTab(int index) => setState(() => _mainTab = index);
+
+  Widget _buildSidebarItem(IconData icon, String label, int index, Color textColor, Color iconColor, Color hoverColor) {
+    bool isActive = _mainTab == index;
+    return InkWell(
+      onTap: () => setState(() => _mainTab = index),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(color: isActive ? hoverColor : Colors.transparent, borderRadius: BorderRadius.circular(6)),
+        child: Row(children: [
+            Icon(icon, color: iconColor, size: 16),
+            const SizedBox(width: 12),
+            Text(label, style: TextStyle(color: textColor, fontSize: 14)),
+        ]),
       ),
     );
   }
 
-  Widget _buildInputTypeBtn(int index, IconData icon, String label) {
-    bool selected = _inputType == index;
-    return InkWell(
-      onTap: () => setState(() => _inputType = index),
+  Widget _buildChallengeMap(Color cardColor, Color textColor) {
+    return Center(
+      child: Wrap(
+        spacing: 20, runSpacing: 20, alignment: WrapAlignment.center,
+        children: _levels.map((level) => _buildLevelCard(level, cardColor, textColor)).toList(),
+      ),
+    );
+  }
+
+  Widget _buildLevelCard(GameLevel level, Color cardColor, Color textColor) {
+    return Container(
+      width: 140, padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)]),
+      child: Column(
+        children: [
+          Icon(level.isLocked ? Icons.lock : Icons.star, color: level.isLocked ? Colors.grey : Colors.amber, size: 30),
+          const SizedBox(height: 10),
+          Text("Level ${level.level}", style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+          const SizedBox(height: 10),
+          ElevatedButton(onPressed: level.isLocked ? null : () => _startLevel(level), child: const Text("Play", style: TextStyle(fontSize: 10)))
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGeneratorCard(Color cardColor, Color textColor, Color subTextColor) {
+    return Container(
+      padding: const EdgeInsets.all(30),
+      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)]),
+      child: Column(
+        children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+              _buildInputTab("Upload", 0, textColor),
+              _buildInputTab("YouTube", 1, textColor),
+              _buildInputTab("Text", 2, textColor),
+          ]),
+          const SizedBox(height: 30),
+          if (_selectedInputTab == 1)
+             TextField(controller: _youtubeController, style: TextStyle(color: textColor), decoration: InputDecoration(hintText: "YouTube Link", border: const OutlineInputBorder(), hintStyle: TextStyle(color: subTextColor))),
+          if (_selectedInputTab == 2)
+             TextField(controller: _notesController, maxLines: 5, style: TextStyle(color: textColor), decoration: InputDecoration(hintText: "Notes", border: const OutlineInputBorder(), hintStyle: TextStyle(color: subTextColor))),
+          if (_selectedInputTab == 0)
+             ElevatedButton(onPressed: _pickFile, child: Text(_selectedFile?.name ?? "Upload File")),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: _startStudy, 
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6C63FF), foregroundColor: Colors.white),
+            child: const Text("Generate")
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStudentJoinCard(Color cardColor, Color textColor, Color subTextColor) {
+     return Container(
+       padding: const EdgeInsets.all(30),
+       decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(20)),
+       child: Column(children: [
+         TextField(controller: _gameCodeController, style: TextStyle(color: textColor), decoration: InputDecoration(hintText: "Game Code", hintStyle: TextStyle(color: subTextColor))),
+         const SizedBox(height: 10),
+         TextField(controller: _studentNameController, style: TextStyle(color: textColor), decoration: InputDecoration(hintText: "Name", hintStyle: TextStyle(color: subTextColor))),
+         const SizedBox(height: 20),
+         ElevatedButton(onPressed: _joinGame, child: const Text("Join"))
+       ]),
+     );
+  }
+
+  Widget _buildInputTab(String label, int index, Color textColor) {
+    bool isSelected = _selectedInputTab == index;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedInputTab = index),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(color: selected ? Colors.white24 : Colors.transparent, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white24)),
-        child: Row(children: [Icon(icon, size: 16), const SizedBox(width: 5), Text(label)]),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF6C63FF) : Colors.transparent, 
+          borderRadius: BorderRadius.circular(20),
+          border: isSelected ? null : Border.all(color: Colors.grey.withOpacity(0.5))
+        ),
+        child: Text(label, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Colors.white : textColor)),
       ),
     );
   }

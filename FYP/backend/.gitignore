@@ -1,0 +1,29 @@
+# --- PYTHON BACKEND ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+.DS_Store
+config.py
+api_secrets.py  
+
+# --- FLUTTER FRONTEND ---
+.dart_tool/
+.packages
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Android-specific
+android/gradle/
+android/.gradle/
+android/app/build/
+android/local.properties
+
+# iOS-specific
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/.generated/

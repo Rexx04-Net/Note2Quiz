@@ -1,0 +1,28 @@
+{
+    "dfaf": {
+        "records": []
+    },
+    "dfkdkkas": {
+        "records": []
+    },
+    "sdsd": {
+        "records": []
+    },
+    "dsfsdf": {
+        "records": []
+    },
+    "dsnfsdnfsa": {
+        "records": [
+            {
+                "id": "390412fc-398f-4e53-80ec-c7095672f431",
+                "title": "New Study Session",
+                "content": "",
+                "type": "text",
+                "youtubeUrl": "",
+                "isPinned": false,
+                "timestamp": 1766394991.0442472,
+                "dateStr": "2025-12-22 17:16"
+            }
+        ]
+    }
+}

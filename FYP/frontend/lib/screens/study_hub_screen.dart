@@ -1,13 +1,15 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart'; // Required for kIsWeb
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 
 import '../widgets/flashcard_view.dart';
+import '../widgets/loading_overlay.dart'; // Ensure imported
 import 'arena_screen.dart';
+import '../config.dart';
 
-const String baseUrl = 'http://127.0.0.1:5000';
+const String baseUrl = 'https://countryfied-dario-addictively.ngrok-free.dev';
 
 class StudyHubScreen extends StatefulWidget {
   final String notes;
@@ -33,10 +35,18 @@ class _StudyHubScreenState extends State<StudyHubScreen> {
     _fetchNotes();
   }
 
-  Future<http.MultipartRequest> _createRequest(String endpoint) async {
+  // ✅ FIX: Return type is Future<dynamic>
+  Future<dynamic> _createRequest(String endpoint) async {
     var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/$endpoint'));
-    request.fields['notes'] = widget.notes;
-    request.fields['youtube_url'] = widget.youtubeUrl;
+    
+    if (widget.notes.isNotEmpty) {
+      request.fields['notes'] = widget.notes;
+    }
+    
+    if (widget.youtubeUrl.isNotEmpty) {
+      request.fields['youtube_url'] = widget.youtubeUrl;
+    }
+
     if (widget.file != null) {
       if (kIsWeb && widget.file!.bytes != null) {
         request.files.add(http.MultipartFile.fromBytes('file', widget.file!.bytes!, filename: widget.file!.name));
@@ -48,16 +58,19 @@ class _StudyHubScreenState extends State<StudyHubScreen> {
   }
 
   Future<void> _fetchNotes() async {
+    // Initial fetch handled on screen load, show spinner in body
     try {
       var request = await _createRequest('generate-notes');
-      var response = await http.Response.fromStream(await request.send());
-      
-      if (response.statusCode == 200) {
-        setState(() => _generatedNotes = jsonDecode(response.body)['notes']);
-      } else {
-        // ✅ FIX: Show the ACTUAL error from the server
-        final errorData = jsonDecode(response.body);
-        setState(() => _generatedNotes = "Failed: ${errorData['error'] ?? 'Unknown Server Error'}");
+      // Cast safely
+      if (request is http.MultipartRequest) {
+          var response = await http.Response.fromStream(await request.send());
+          
+          if (response.statusCode == 200) {
+            setState(() => _generatedNotes = jsonDecode(response.body)['notes']);
+          } else {
+            final errorData = jsonDecode(response.body);
+            setState(() => _generatedNotes = "Failed: ${errorData['error'] ?? 'Unknown Server Error'}");
+          }
       }
     } catch (e) {
       setState(() => _generatedNotes = "Connection Error: Is the backend running?\n\nDetails: $e");
@@ -70,57 +83,66 @@ class _StudyHubScreenState extends State<StudyHubScreen> {
     setState(() => _loadingQuiz = true);
     try {
       var request = await _createRequest('generate-quiz');
-      request.fields['difficulty'] = _quizDifficulty;
-      var response = await http.Response.fromStream(await request.send());
-      
-      if (response.statusCode == 200) {
-        final quizData = jsonDecode(response.body);
-        if (mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => ArenaScreen(battleData: quizData)),
-          );
-        }
-      } else {
-        // ✅ FIX: Show error popup if quiz fails
-        final errorMsg = jsonDecode(response.body)['error'] ?? "Server Error";
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Quiz Error: $errorMsg"), backgroundColor: Colors.red));
-      }
+       if (request is http.MultipartRequest) {
+          request.fields['difficulty'] = _quizDifficulty;
+          var response = await http.Response.fromStream(await request.send());
+          
+          if (response.statusCode == 200) {
+            final quizData = jsonDecode(response.body);
+            if (mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ArenaScreen(battleData: quizData)),
+              );
+            }
+          } else {
+            final errorMsg = jsonDecode(response.body)['error'] ?? "Server Error";
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Quiz Error: $errorMsg"), backgroundColor: Colors.red));
+          }
+       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Connection Error: $e"), backgroundColor: Colors.red));
     } finally {
-      setState(() => _loadingQuiz = false);
+      if (mounted) setState(() => _loadingQuiz = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Study Hub"), elevation: 0, backgroundColor: Colors.transparent),
-      body: Row(
-        children: [
-          Container(
-            width: 80,
-            color: Colors.black26,
-            child: Column(
-              children: [
-                const SizedBox(height: 20),
-                _buildNavIcon(0, Icons.article, "Notes"),
-                const SizedBox(height: 20),
-                _buildNavIcon(1, Icons.style, "Cards"),
-                const SizedBox(height: 20),
-                _buildNavIcon(2, Icons.sports_esports, "Quiz"),
-              ],
-            ),
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(title: const Text("Study Hub"), elevation: 0, backgroundColor: Colors.transparent),
+          body: Row(
+            children: [
+              Container(
+                width: 80,
+                color: Colors.black26,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 20),
+                    _buildNavIcon(0, Icons.article, "Notes"),
+                    const SizedBox(height: 20),
+                    _buildNavIcon(1, Icons.style, "Cards"),
+                    const SizedBox(height: 20),
+                    _buildNavIcon(2, Icons.sports_esports, "Quiz"),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(30.0),
+                  child: _buildContent(),
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(30.0),
-              child: _buildContent(),
-            ),
-          ),
-        ],
-      ),
+        ),
+        
+        // --- LOADING OVERLAY ---
+        if (_loadingQuiz)
+          const LoadingOverlay()
+      ],
     );
   }
 
@@ -192,9 +214,8 @@ class _StudyHubScreenState extends State<StudyHubScreen> {
               ],
             ),
             const SizedBox(height: 40),
-            _loadingQuiz 
-              ? const CircularProgressIndicator()
-              : SizedBox(
+            // Loading handled by Overlay
+             SizedBox(
                   width: double.infinity, height: 50,
                   child: ElevatedButton(
                     onPressed: _startQuiz,

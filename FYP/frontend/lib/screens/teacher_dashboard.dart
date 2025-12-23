@@ -2,8 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../config.dart';
 
-const String baseUrl = 'http://127.0.0.1:5000';
+const String baseUrl = 'https://countryfied-dario-addictively.ngrok-free.dev';
 
 class TeacherDashboard extends StatefulWidget {
   final String gameCode;

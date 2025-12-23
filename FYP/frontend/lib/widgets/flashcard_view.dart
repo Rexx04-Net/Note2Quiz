@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 class FlashcardView extends StatefulWidget {
-  final Future<http.MultipartRequest> Function(String) createRequest;
+  // Update type to Future<dynamic> to match StudyHubScreen's _createRequest
+  final Future<dynamic> Function(String) createRequest;
   const FlashcardView({super.key, required this.createRequest});
   @override
   State<FlashcardView> createState() => _FlashcardViewState();
@@ -23,19 +24,24 @@ class _FlashcardViewState extends State<FlashcardView> {
     
     try {
       var request = await widget.createRequest('generate-flashcards');
-      request.fields['depth'] = _cardMode;
-      var response = await http.Response.fromStream(await request.send());
-      
-      if (response.statusCode == 200) {
-        setState(() {
-          _flashcards = jsonDecode(response.body);
-          _errorMessage = null;
-        });
+      // Check if request is actually a MultipartRequest before accessing fields
+      if (request is http.MultipartRequest) {
+        request.fields['depth'] = _cardMode;
+        var response = await http.Response.fromStream(await request.send());
+        
+        if (response.statusCode == 200) {
+          setState(() {
+            _flashcards = jsonDecode(response.body);
+            _errorMessage = null;
+          });
+        } else {
+          final errorBody = jsonDecode(response.body);
+          setState(() => _errorMessage = errorBody['error'] ?? "Server Error");
+        }
       } else {
-        // ✅ FIX: Capture the actual error message
-        final errorBody = jsonDecode(response.body);
-        setState(() => _errorMessage = errorBody['error'] ?? "Server Error");
+         setState(() => _errorMessage = "Invalid request type");
       }
+
     } catch (e) {
       setState(() => _errorMessage = "Connection Failed: $e");
     } finally {

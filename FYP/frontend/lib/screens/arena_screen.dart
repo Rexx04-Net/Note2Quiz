@@ -3,8 +3,9 @@ import 'dart:math';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../config.dart';
 
-const String baseUrl = 'http://127.0.0.1:5000';
+const String baseUrl = 'https://countryfied-dario-addictively.ngrok-free.dev';
 
 class ArenaScreen extends StatefulWidget {
   final List<dynamic> battleData;
@@ -41,7 +42,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _shakeAnimation = Tween<double>(begin: 0, end: 10).animate(CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn))..addStatusListener((status) { if (status == AnimationStatus.completed) _shakeController.reset(); });
   }
 
-  // 📡 Send Score to Backend
   Future<void> _sendScoreUpdate() async {
     if (widget.multiplayerCode == null) return;
     try {
@@ -71,7 +71,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         _monsterHP = (_monsterHP - damage).clamp(0, 100); 
         _feedbackText = "CRITICAL HIT!"; 
         _feedbackColor = Colors.greenAccent;
-        _totalScore += 100; // Add points
+        _totalScore += 100; 
       });
       _shakeController.forward();
     } else {
@@ -79,27 +79,26 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         _playerHP = (_playerHP - 25).clamp(0, 100); 
         _feedbackText = "MISS!"; 
         _feedbackColor = Colors.redAccent; 
-        _totalScore = (_totalScore - 10).clamp(0, 9999); // Lose points
+        _totalScore = (_totalScore - 10).clamp(0, 9999);
       });
       _shakeController.forward();
     }
 
-    _sendScoreUpdate(); // Update Teacher
+    _sendScoreUpdate(); 
 
     Timer(const Duration(seconds: 2), () {
       if (!mounted) return;
       if (_monsterHP <= 0 || _playerHP <= 0) {
-        _endGame(_playerHP > _monsterHP);
+        _endGame(_monsterHP <= 0); // Pass true if monster died
       } else if (_currentQIndex < widget.battleData.length - 1) {
         setState(() { _currentQIndex++; _isTurnLocked = false; _feedbackText = "Choose your attack!"; _feedbackColor = Colors.white; });
       } else {
-        _endGame(_playerHP > _monsterHP);
+        _endGame(_monsterHP <= 0);
       }
     });
   }
 
   void _endGame(bool isVictory) {
-    // ✅ FIX: Using pushReplacement to ensure the Result Screen appears
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (context) => ResultScreen(isVictory: isVictory, score: _totalScore))
     );
@@ -160,9 +159,10 @@ class ResultScreen extends StatelessWidget {
             Text("Final Score: $score", style: const TextStyle(fontSize: 24, color: Colors.amber)),
             const SizedBox(height: 40),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context), 
+              // ✅ FIX: Return the victory status when popping
+              onPressed: () => Navigator.pop(context, isVictory), 
               style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15)),
-              child: const Text("Back to Menu")
+              child: const Text("Return to Map")
             )
           ],
         ),
