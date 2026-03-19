@@ -1,18 +1,16 @@
-# note2Quiz Backend - UPDATED WITH USER LOGIN & SAVED RECORDS
-# Run with: python app.py
-
 import os
 import sys
-import re
 import json
-import random
-import string
-import time
 import uuid
-from datetime import datetime
+import datetime
+import time
+import re
+import random   
+import string   
 import google.generativeai as genai
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from pymongo import MongoClient
 from pypdf import PdfReader
 from pptx import Presentation
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -21,7 +19,6 @@ from youtube_transcript_api import YouTubeTranscriptApi
 print("🔍 --- STARTING BACKEND ---")
 current_dir = os.path.dirname(os.path.abspath(__file__))
 GEMINI_API_KEY = None
-DATA_FILE = os.path.join(current_dir, "users_data.json")
 
 # Secure Key Loading
 try:
@@ -29,323 +26,366 @@ try:
     from api_secrets import GEMINI_API_KEY
     print("✅ Successfully imported API Key.")
 except:
-    try:
-        with open(os.path.join(current_dir, "api_secrets.py"), "r", encoding="utf-8") as f:
-            for line in f:
-                if "GEMINI_API_KEY" in line and "=" in line:
-                    GEMINI_API_KEY = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    break
-    except: pass
+    pass
 
 app = Flask(__name__)
-CORS(app) 
+CORS(app, resources={r"/*": {"origins": "*"}})
 
-# --- PERSISTENCE LAYER ---
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
-
-def save_data(data):
-    with open(DATA_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
-
-# Load data on startup
-users_db = load_data()
-active_games = {}
-generation_progress = {} 
-
-# --- AI CONFIG ---
-CHOSEN_MODEL_NAME = 'models/gemini-1.5-flash'
+# --- DATABASE CONNECTION ---
+USING_MONGO = False
 try:
-    if GEMINI_API_KEY:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(CHOSEN_MODEL_NAME)
-    else:
-        model = None
+    client = MongoClient("mongodb://localhost:27017/", serverSelectionTimeoutMS=2000)
+    db = client["note2quiz_db"]
+    notebooks_col = db["notebooks"]
+    users_col = db["users"]  
+    logs_col = db["activity_logs"] # ✅ NEW: Dedicated folder for tracking actions!
+    
+    client.server_info()
+    print("✅ Connected to MongoDB")
+    USING_MONGO = True
 except:
-    model = None
+    print("⚠️ MongoDB not found. Falling back to memory storage.")
+    memory_notebooks = []
+    
+# Active Games Memory
+active_games = {}
+
+# --- AI CONFIGURATION ---
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+
+MODEL_PRIORITY = [
+    'gemini-2.5-flash',
+    'models/gemini-2.5-flash',
+    'gemini-1.5-flash',
+    'gemini-2.0-flash',
+]
+
+def generate_with_fallback(prompt):
+    last_error = None
+    for model_name in MODEL_PRIORITY:
+        try:
+            print(f"🤖 Trying AI Model: {model_name}...")
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            print(f"✅ Success with {model_name}")
+            return response.text
+        except Exception as e:
+            print(f"⚠️ Failed with {model_name}: {e}")
+            last_error = e
+            if "400" in str(e) or "API_KEY" in str(e): break
+            time.sleep(1)
+    
+    return f"AI Error: All models failed. Last error: {str(last_error)}"
+
+# ✅ NEW: HELPER FUNCTION FOR TRACKING ACTIVITY
+def log_activity(email, action, details=""):
+    if USING_MONGO:
+        try:
+            log_entry = {
+                "email": email,
+                "action": action,
+                "details": details,
+                "timestamp": str(datetime.datetime.now())
+            }
+            logs_col.insert_one(log_entry)
+            print(f"📝 LOGGED: {email} -> {action}")
+        except Exception as e:
+            print(f"⚠️ Failed to log activity: {e}")
 
 # --- HELPER FUNCTIONS ---
-def update_progress(task_id, value):
-    if task_id:
-        generation_progress[task_id] = value
+def get_notebook(notebook_id):
+    if USING_MONGO:
+        return notebooks_col.find_one({"id": notebook_id})
+    else:
+        return next((n for n in memory_notebooks if n["id"] == notebook_id), None)
+
+def save_notebook(notebook):
+    if USING_MONGO:
+        notebooks_col.replace_one({"id": notebook["id"]}, notebook, upsert=True)
+    else:
+        for i, n in enumerate(memory_notebooks):
+            if n["id"] == notebook["id"]:
+                memory_notebooks[i] = notebook
+                return
+        memory_notebooks.append(notebook)
+
+def get_context(notebook_id):
+    nb = get_notebook(notebook_id)
+    if not nb: return ""
+    context = ""
+    for source in nb.get("sources", []):
+        context += f"\n--- SOURCE: {source['title']} ({source['type']}) ---\n{source['content']}\n"
+    return context
+
+def clean_ai_response(text):
+    try: return json.loads(text)
+    except:
+        match = re.search(r'(\[.*\]|\{.*\})', text, re.DOTALL)
+        if match:
+            try: return json.loads(match.group(0))
+            except: pass
+    return None
 
 def extract_text_from_pdf(file_stream):
     try:
         reader = PdfReader(file_stream)
-        text = ""
-        for page in reader.pages:
-            if page.extract_text(): text += page.extract_text() + "\n"
-        return text
+        return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
     except: return ""
 
 def extract_text_from_pptx(file_stream):
     try:
         prs = Presentation(file_stream)
-        text = ""
+        text = []
         for slide in prs.slides:
             for shape in slide.shapes:
-                if hasattr(shape, "text"): text += shape.text + "\n"
-        return text
+                if hasattr(shape, "text"): text.append(shape.text)
+        return "\n".join(text)
     except: return ""
 
-def extract_youtube_transcript(url):
-    print(f"📺 Fetching YouTube: {url}")
-    try:
-        match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11})", url)
-        if not match: return None
-        video_id = match.group(1)
-        try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            try:
-                transcript = transcript_list.find_transcript(['en', 'en-US'])
-            except:
-                transcript = next(iter(transcript_list))
-            data = transcript.fetch()
-        except:
-            data = YouTubeTranscriptApi.get_transcript(video_id)
-        return " ".join([t['text'] for t in data])
-    except Exception as e:
-        print(f"❌ YouTube Error: {e}")
-        return None
-
-def process_content(req):
-    notes = req.form.get('notes', '')
-    yt_url = req.form.get('youtube_url', '')
-    
-    if yt_url:
-        yt_text = extract_youtube_transcript(yt_url)
-        if yt_text: notes += f"\n\n[YOUTUBE TRANSCRIPT]:\n{yt_text}"
-
-    if 'file' in req.files:
-        f = req.files['file']
-        if f.filename.endswith('.pdf'): 
-            text = extract_text_from_pdf(f)
-            if text: notes += f"\n[PDF]: {text}"
-        elif f.filename.endswith('.pptx'): 
-            text = extract_text_from_pptx(f)
-            if text: notes += f"\n[PPTX]: {text}"
-            
-    return notes
-
-# --- AUTH & RECORDS ENDPOINTS ---
+# --- ENDPOINTS ---
+@app.route('/', methods=['GET'])
+def home(): return "Note2Quiz Backend is Running! 🚀"
 
 @app.route('/login', methods=['POST'])
 def login():
-    """Simple email login. Creates user if not exists."""
-    email = request.json.get('email')
-    if not email: return jsonify({"error": "Email required"}), 400
-    
-    if email not in users_db:
-        users_db[email] = {"records": []}
-        save_data(users_db)
-    
-    return jsonify({"message": "Login successful", "email": email})
-
-@app.route('/get-records', methods=['POST'])
-def get_records():
-    email = request.json.get('email')
-    if not email or email not in users_db:
-        return jsonify([])
-    
-    # Sort: Pinned first, then by date
-    records = users_db[email]["records"]
-    records.sort(key=lambda x: (not x.get('isPinned', False), x.get('timestamp', 0)), reverse=True)
-    return jsonify(records)
-
-@app.route('/save-record', methods=['POST'])
-def save_record():
     data = request.json
-    email = data.get('email')
-    if not email or email not in users_db:
-        return jsonify({"error": "User not found"}), 404
-
-    record_id = data.get('id')
+    email = data.get('email', '').strip().lower()
     
-    new_record = {
-        "id": record_id if record_id else str(uuid.uuid4()),
-        "title": data.get('title', 'Untitled Note'),
-        "content": data.get('content', ''),
-        "type": data.get('type', 'text'), # text or video
-        "youtubeUrl": data.get('youtubeUrl', ''),
-        "isPinned": data.get('isPinned', False),
-        "timestamp": time.time(),
-        "dateStr": datetime.now().strftime("%Y-%m-%d %H:%M")
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    if USING_MONGO:
+        existing_user = users_col.find_one({"email": email})
+        
+        if not existing_user:
+            new_user = {
+                "email": email,
+                "created_at": str(datetime.datetime.now()),
+                "role": "student" 
+            }
+            users_col.insert_one(new_user)
+            log_activity(email, "Registered Account", "First time user sign-in") # ✅ Logging Registration
+        else:
+            log_activity(email, "Logged In", "User signed in successfully") # ✅ Logging normal Login
+
+    return jsonify({"success": True, "email": email, "message": "Login successful"})
+
+@app.route('/create-notebook', methods=['POST'])
+def create_notebook():
+    data = request.json
+    email = data.get('email', 'guest')
+    title = data.get('title', 'Untitled Notebook')
+    
+    new_nb = {
+        "id": str(uuid.uuid4()),
+        "user_email": email,
+        "title": title,
+        "sources": [],
+        "created_at": str(datetime.datetime.now())
     }
-
-    # If ID exists, update. Else append.
-    records = users_db[email]["records"]
-    existing_index = next((index for (index, d) in enumerate(records) if d["id"] == new_record["id"]), None)
+    save_notebook(new_nb)
     
-    if existing_index is not None:
-        # Preserve pinned state if not explicitly sent, though usually it is
-        if 'isPinned' not in data:
-            new_record['isPinned'] = records[existing_index].get('isPinned', False)
-        records[existing_index] = new_record
+    # ✅ Logging Notebook Creation
+    log_activity(email, "Created Notebook", f"Created notebook titled: {title}")
+    
+    if USING_MONGO: new_nb.pop('_id', None)
+    return jsonify(new_nb)
+
+@app.route('/get-notebooks', methods=['POST'])
+def get_notebooks():
+    email = request.json.get('email', 'guest')
+    if USING_MONGO:
+        notebooks = list(notebooks_col.find({"user_email": email}, {"_id": 0}))
     else:
-        records.insert(0, new_record)
-    
-    save_data(users_db)
-    return jsonify({"message": "Saved", "record": new_record})
+        notebooks = [n for n in memory_notebooks if n['user_email'] == email]
+    return jsonify(notebooks)
 
-@app.route('/delete-record', methods=['POST'])
-def delete_record():
+@app.route('/add-source', methods=['POST'])
+def add_source():
+    notebook_id = request.form.get('notebook_id')
+    source_type = request.form.get('type', 'text')
+    content = ""
+    title = "New Source"
+
+    if 'file' in request.files:
+        f = request.files['file']
+        title = f.filename
+        if f.filename.endswith('.pdf'): content = extract_text_from_pdf(f)
+        elif f.filename.endswith('.pptx'): content = extract_text_from_pptx(f)
+    else:
+        content = request.form.get('content', '')
+
+    if not content.strip(): return jsonify({"error": "No text extracted"}), 400
+
+    new_source = {
+        "id": str(uuid.uuid4()),
+        "title": title,
+        "content": content,
+        "type": source_type,
+        "date": str(datetime.datetime.now())
+    }
+    
+    nb = get_notebook(notebook_id)
+    if nb:
+        nb.setdefault('sources', []).append(new_source)
+        save_notebook(nb)
+        
+        # ✅ Logging Source Upload
+        user_email = nb.get('user_email', 'unknown')
+        log_activity(user_email, "Added Source", f"Added {source_type} source: {title}")
+        
+        return jsonify(new_source)
+    return jsonify({"error": "Notebook not found"}), 404
+
+@app.route('/generate-studio-item', methods=['POST'])
+def generate_studio_item():
     data = request.json
-    email = data.get('email')
-    record_id = data.get('id')
-    
-    if email in users_db:
-        users_db[email]["records"] = [r for r in users_db[email]["records"] if r["id"] != record_id]
-        save_data(users_db)
-        return jsonify({"success": True})
-    return jsonify({"error": "User not found"}), 404
+    notebook_id = data.get('notebook_id')
+    tool_type = data.get('tool_type')
+    difficulty = data.get('difficulty', 'Standard')
+    num_questions = 5 if difficulty == "Easy" else 20 if difficulty == "Hard" else 10
 
-@app.route('/toggle-pin', methods=['POST'])
-def toggle_pin():
-    data = request.json
-    email = data.get('email')
-    record_id = data.get('id')
-    
-    if email in users_db:
-        for r in users_db[email]["records"]:
-            if r["id"] == record_id:
-                r["isPinned"] = not r.get("isPinned", False)
-                break
-        save_data(users_db)
-        return jsonify({"success": True})
-    return jsonify({"error": "User not found"}), 404
+    # ✅ Logging AI Generation Start
+    nb = get_notebook(notebook_id)
+    user_email = nb.get('user_email', 'unknown') if nb else 'unknown'
+    log_activity(user_email, f"Generated {tool_type.capitalize()}", f"Triggered Gemini AI for {difficulty} {tool_type}")
 
-@app.route('/rename-record', methods=['POST'])
-def rename_record():
-    data = request.json
-    email = data.get('email')
-    record_id = data.get('id')
-    new_title = data.get('title')
-    
-    if email in users_db:
-        for r in users_db[email]["records"]:
-            if r["id"] == record_id:
-                r["title"] = new_title
-                break
-        save_data(users_db)
-        return jsonify({"success": True})
-    return jsonify({"error": "User not found"}), 404
+    context = get_context(notebook_id)
+    if len(context) < 50: return jsonify({"type": "text", "data": "Not enough content. Add sources first."})
 
-# --- CONTENT GENERATION ENDPOINTS ---
+    prompt = ""
+    if tool_type == "quiz":
+        prompt = f"""Generate a {difficulty} Quiz with exactly {num_questions} questions.
+        STRICT JSON FORMAT:
+        [
+            {{
+                "question": "Question text here?",
+                "options": ["Option A", "Option B", "Option C", "Option D"],
+                "answer": "Option A",
+                "hint": "A short, helpful clue without giving the answer away."
+            }}
+        ]
+        Context: {context[:35000]}"""
 
-@app.route('/', methods=['GET'])
-def home(): return "Note2Quiz Server Running! 🚀"
+    elif tool_type == "flashcard":
+        prompt = f"""Generate 10 Flashcards. Format: [{{ "front": "Term", "back": "Definition" }}]. Context: {context[:35000]}"""
 
-@app.route('/get-transcript', methods=['POST'])
-def get_transcript_endpoint():
-    data = request.json
-    url = data.get('url')
-    if not url: return jsonify({"error": "No URL provided"}), 400
-    
-    print(f"📥 Fetching transcript for: {url}")
-    text = extract_youtube_transcript(url)
-    
-    if text: return jsonify({"transcript": text})
-    else: return jsonify({"error": "Could not fetch transcript."}), 404
+    elif tool_type == "mindmap":
+        prompt = f"""Create a hierarchical Mind Map using Emojis (🌳, 🌿). No Markdown blocks. Context: {context[:35000]}"""
 
-@app.route('/generate-notes', methods=['POST'])
-def generate_notes():
-    task_id = request.form.get('task_id')
-    update_progress(task_id, 10)
+    elif tool_type == "report":
+        prompt = f"""Write an Executive Briefing Doc with bold headers. Context: {context[:35000]}"""
 
-    content = process_content(request)
-    if len(content.strip()) < 50: 
-        update_progress(task_id, 100)
-        return jsonify({"error": "Not enough content."}), 400
-    
     try:
-        update_progress(task_id, 40)
-        print(f"🤖 Generating Notes using {CHOSEN_MODEL_NAME}...")
-        prompt = f"Create comprehensive study notes (Markdown format) for:\n{content[:30000]}"
-        resp = model.generate_content(prompt)
-        update_progress(task_id, 90)
-        return jsonify({"notes": resp.text})
-    except Exception as e: 
-        update_progress(task_id, 100)
-        return jsonify({"error": str(e)}), 500
+        text = generate_with_fallback(prompt)
+        if text.startswith("AI Error:"): return jsonify({"type": "text", "data": text})
 
-@app.route('/generate-quiz', methods=['POST'])
-def generate_quiz():
-    task_id = request.form.get('task_id')
-    update_progress(task_id, 10)
-    content = process_content(request)
-    if len(content.strip()) < 50: return jsonify({"error": "Not enough content."}), 400
+        if tool_type in ["quiz", "flashcard"]:
+            json_data = clean_ai_response(text)
+            if json_data: return jsonify({"type": "json", "data": json_data})
+            else: return jsonify({"type": "text", "data": "Error: AI response was not valid JSON."})
+            
+        return jsonify({"type": "text", "data": text})
+    except Exception as e:
+        return jsonify({"type": "text", "data": f"Backend Error: {str(e)}"})
+
+
+@app.route('/delete-notebook', methods=['POST'])
+def delete_notebook():
+    notebook_id = request.json.get('id')
     
-    try:
-        update_progress(task_id, 30)
-        prompt = f"""
-        Create a Quiz. JSON format: [ {{ "question": "...", "options": ["A", "B", "C", "D"], "answer": "A", "damage": 20 }} ]
-        Content: {content[:30000]}
-        """
-        resp = model.generate_content(prompt)
-        update_progress(task_id, 90)
-        return jsonify(json.loads(resp.text.replace("```json", "").replace("```", "").strip()))
-    except Exception as e: 
-        return jsonify({"error": str(e)}), 500
+    nb = get_notebook(notebook_id)
+    user_email = nb.get('user_email', 'unknown') if nb else 'unknown'
+    title = nb.get('title', 'Unknown Notebook') if nb else 'Unknown Notebook'
 
-@app.route('/generate-flashcards', methods=['POST'])
-def generate_flashcards():
-    content = process_content(request)
-    if len(content.strip()) < 50: return jsonify({"error": "Not enough content."}), 400
-    try:
-        prompt = f"Create 10 flashcards. JSON format: [{{'front': 'Question', 'back': 'Answer'}}]. Content:\n{content[:30000]}"
-        resp = model.generate_content(prompt)
-        return jsonify(json.loads(resp.text.replace("```json", "").replace("```", "").strip()))
-    except Exception as e: return jsonify({"error": str(e)}), 500
+    if USING_MONGO:
+        notebooks_col.delete_one({"id": notebook_id})
+    else:
+        global memory_notebooks
+        memory_notebooks = [n for n in memory_notebooks if n["id"] != notebook_id]
+        
+    # ✅ Logging Deletion
+    log_activity(user_email, "Deleted Notebook", f"Deleted notebook titled: {title}")
+        
+    return jsonify({"success": True})
 
-# --- MULTIPLAYER ENDPOINTS ---
-# (Keeping basic multiplayer logic for compatibility)
-
+# --- MULTIPLAYER KAHOOT-STYLE ENDPOINTS REMAIN UNCHANGED BELOW ---
 @app.route('/host-game', methods=['POST'])
 def host_game():
-    content = process_content(request)
-    if len(content.strip()) < 50: return jsonify({"error": "Not enough content."}), 400
-    try:
-        prompt = f"""Create a Multiplayer Quiz. JSON format: [ {{ "question": "...", "options": ["A", "B", "C", "D"], "answer": "A", "damage": 20 }} ] Content: {content[:30000]}"""
-        resp = model.generate_content(prompt)
-        quiz_data = json.loads(resp.text.replace("```json", "").replace("```", "").strip())
-        while True:
-            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
-            if code not in active_games: break
-        active_games[code] = { "quiz": quiz_data, "players": {} }
-        return jsonify({"code": code, "quiz": quiz_data})
-    except Exception as e: return jsonify({"error": str(e)}), 500
+    data = request.json
+    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    email = data.get('email', 'guest')
+    
+    active_games[code] = {
+        "host_email": email,
+        "quiz_data": data.get('quiz_data', []),
+        "players": {},
+        "status": "waiting"
+    }
+    
+    log_activity(email, "Hosted Live Game", f"Created game room with code: {code}")
+    return jsonify({"code": code})
 
 @app.route('/join-game', methods=['POST'])
 def join_game():
     data = request.json
     code = data.get('code', '').upper()
-    name = data.get('name', 'Unknown')
+    name = data.get('name', 'Anonymous')
+    
     if code in active_games:
-        if name not in active_games[code]['players']: active_games[code]['players'][name] = 0
-        return jsonify({"quiz": active_games[code]['quiz']})
+        if active_games[code]['status'] != 'waiting':
+            return jsonify({"error": "Game already started! Too late to join."}), 400
+            
+        active_games[code]['players'][name] = 0
+        log_activity("player_join", "Joined Game", f"Player '{name}' joined room {code}")
+        return jsonify({
+            "success": True, 
+            "quiz_data": active_games[code]['quiz_data']
+        })
     return jsonify({"error": "Invalid Game Code"}), 404
+
+@app.route('/start-game', methods=['POST'])
+def start_game():
+    code = request.json.get('code', '').upper()
+    if code in active_games:
+        active_games[code]['status'] = 'playing'
+        return jsonify({"success": True})
+    return jsonify({"error": "Game not found"}), 404
+
+@app.route('/get-game-status', methods=['POST'])
+def get_game_status():
+    code = request.json.get('code', '').upper()
+    if code in active_games:
+        players = list(active_games[code]['players'].keys())
+        return jsonify({
+            "status": active_games[code]['status'],
+            "players": players
+        })
+    return jsonify({"error": "Game not found"}), 404
 
 @app.route('/update-score', methods=['POST'])
 def update_score():
     data = request.json
     code = data.get('code', '').upper()
+    name = data.get('name')
+    score = data.get('score', 0)
+    
+    if code in active_games and name in active_games[code]['players']:
+        active_games[code]['players'][name] = score
+        return jsonify({"success": True})
+    return jsonify({"error": "Game or player not found"}), 404
+
+@app.route('/get-leaderboard', methods=['POST'])
+def get_leaderboard():
+    code = request.json.get('code', '').upper()
     if code in active_games:
-        active_games[code]['players'][data.get('name')] = data.get('score')
-        return jsonify({"status": "ok"})
+        players = active_games[code]['players']
+        sorted_players = sorted(players.items(), key=lambda x: x[1], reverse=True)
+        leaderboard = [{"name": k, "score": v} for k, v in sorted_players]
+        return jsonify({"leaderboard": leaderboard, "status": active_games[code]['status']})
     return jsonify({"error": "Game not found"}), 404
 
-@app.route('/get-leaderboard/<code_id>', methods=['GET'])
-def get_leaderboard(code_id):
-    code_id = code_id.upper()
-    if code_id in active_games:
-        return jsonify(sorted(active_games[code_id]['players'].items(), key=lambda x: x[1], reverse=True))
-    return jsonify([]), 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

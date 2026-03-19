@@ -1,592 +1,356 @@
-import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:http/http.dart' as http;
-import '../data/level_data.dart';
-import 'teacher_dashboard.dart';
-import 'study_hub_screen.dart';
-import 'arena_screen.dart';
-import 'revision_screen.dart';
-import 'home_screen.dart'; 
-import '../widgets/loading_overlay.dart';
-import 'note_editor_screen.dart';
+import 'dashboard_screen.dart';
 import 'login_screen.dart';
-import '../config.dart';
-
-const String baseUrl = 'https://countryfied-dario-addictively.ngrok-free.dev';
 
 class LobbyScreen extends StatefulWidget {
-  final String? userEmail; // Nullable for Guest Mode
+  final String? userEmail;
   const LobbyScreen({super.key, this.userEmail});
 
   @override
   State<LobbyScreen> createState() => _LobbyScreenState();
 }
 
-class _LobbyScreenState extends State<LobbyScreen> {
-  // Input State
-  final TextEditingController _notesController = TextEditingController();
-  final TextEditingController _youtubeController = TextEditingController();
-  final TextEditingController _gameCodeController = TextEditingController();
-  final TextEditingController _studentNameController = TextEditingController();
-  final TextEditingController _homeInputController = TextEditingController();
+class _LobbyScreenState extends State<LobbyScreen> with TickerProviderStateMixin {
+  // --- SCROLLING LOGIC ---
+  final ScrollController _scrollController = ScrollController();
+  Timer? _scrollTimer;
+  bool _isScrollingForward = true;
 
-  PlatformFile? _selectedFile;
-  int _selectedInputTab = 0;
-  int _mainTab = 0; 
-  bool _isLoading = false;
-  
-  // Records State
-  List<dynamic> _records = [];
-  bool _loadingRecords = false;
-  
-  // Theme State
-  bool _isDarkMode = false; // Default to Light Mode as requested
-
-  List<GameLevel> _levels = generateLevels();
+  // --- ANIMATIONS ---
+  late AnimationController _heroController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
-    if (widget.userEmail != null) {
-      _fetchRecords();
-    }
+    _heroController = AnimationController(duration: const Duration(seconds: 2), vsync: this);
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _heroController, curve: Curves.easeIn));
+    _scaleAnimation = Tween<double>(begin: 0.9, end: 1.0).animate(CurvedAnimation(parent: _heroController, curve: Curves.easeOut));
+    _heroController.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startAutoScroll());
+  }
+
+  void _startAutoScroll() {
+    const double scrollSpeed = 1.0;
+    const Duration tickDuration = Duration(milliseconds: 30);
+    _scrollTimer = Timer.periodic(tickDuration, (timer) {
+      if (!_scrollController.hasClients) return;
+      double maxScroll = _scrollController.position.maxScrollExtent;
+      double currentScroll = _scrollController.offset;
+      if (_isScrollingForward) {
+        if (currentScroll >= maxScroll) _isScrollingForward = false;
+        else _scrollController.jumpTo(currentScroll + scrollSpeed);
+      } else {
+        if (currentScroll <= 0) _isScrollingForward = true;
+        else _scrollController.jumpTo(currentScroll - scrollSpeed);
+      }
+    });
   }
 
   @override
   void dispose() {
-    _notesController.dispose();
-    _youtubeController.dispose();
-    _gameCodeController.dispose();
-    _studentNameController.dispose();
-    _homeInputController.dispose();
+    _heroController.dispose();
+    _scrollTimer?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  // --- RECORD MANAGEMENT ---
-  Future<void> _fetchRecords() async {
-    if (widget.userEmail == null) return;
-    setState(() => _loadingRecords = true);
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/get-records'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': widget.userEmail}),
-      );
-      if (response.statusCode == 200) {
-        setState(() => _records = jsonDecode(response.body));
-      }
-    } catch (e) {
-      debugPrint("Error fetching records: $e");
-    } finally {
-      if (mounted) setState(() => _loadingRecords = false);
-    }
-  }
-
-  // --- NAVIGATION & MENU ---
-  void _login() {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
-  }
-
-  void _logout() {
-    Navigator.pushAndRemoveUntil(
-      context, 
-      MaterialPageRoute(builder: (context) => const LobbyScreen(userEmail: null)),
-      (route) => false
-    );
-  }
-
-  void _showUserMenu(bool isGuest) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: _isDarkMode ? const Color(0xFF2D2B42) : Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40, height: 4, 
-                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
-                margin: const EdgeInsets.only(bottom: 20),
-              ),
-              // User Info
-              ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: isGuest ? Colors.grey : const Color(0xFF6C63FF),
-                  child: Icon(isGuest ? Icons.person : Icons.check, color: Colors.white),
-                ),
-                title: Text(isGuest ? "Guest User" : (widget.userEmail ?? "User"), 
-                  style: TextStyle(fontWeight: FontWeight.bold, color: _isDarkMode ? Colors.white : Colors.black87)),
-                subtitle: Text(isGuest ? "Sign in to save history" : "Logged in", 
-                  style: TextStyle(color: _isDarkMode ? Colors.white70 : Colors.grey)),
-              ),
-              const Divider(),
-              // Theme Toggle
-              SwitchListTile(
-                title: Text("Dark Mode", style: TextStyle(color: _isDarkMode ? Colors.white : Colors.black87)),
-                secondary: Icon(Icons.dark_mode, color: _isDarkMode ? Colors.white : Colors.grey),
-                value: _isDarkMode,
-                activeColor: const Color(0xFF6C63FF),
-                onChanged: (val) {
-                  setState(() => _isDarkMode = val);
-                  Navigator.pop(context); // Close menu to apply/refresh
-                },
-              ),
-              const Divider(),
-              // Action (Login/Logout)
-              ListTile(
-                leading: Icon(isGuest ? Icons.login : Icons.logout, color: isGuest ? Colors.green : Colors.redAccent),
-                title: Text(isGuest ? "Log In" : "Log Out", 
-                  style: TextStyle(color: isGuest ? Colors.green : Colors.redAccent, fontWeight: FontWeight.bold)),
-                onTap: () {
-                  Navigator.pop(context);
-                  isGuest ? _login() : _logout();
-                },
-              ),
-            ],
-          ),
-        );
-      }
-    );
-  }
-
-  void _openNoteEditor([Map<String, dynamic>? record]) async {
-    if (record != null && widget.userEmail == null) return;
-
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NoteEditorScreen(
-          userEmail: widget.userEmail ?? "guest",
-          existingRecord: record,
-        ),
-      ),
-    );
-    if (widget.userEmail != null) _fetchRecords(); 
-  }
-
-  Future<void> _pickFile() async {
-    try {
-      var result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf', 'pptx']);
-      if (result != null) setState(() => _selectedFile = result.files.first);
-    } catch (e) { /* Ignore */ }
-  }
-
-  Future<void> _startStudy() async {
-    String notes = "";
-    String youtube = "";
-    if (_mainTab == 0) {
-       if (_selectedInputTab == 2) notes = _homeInputController.text.trim();
-       if (_selectedInputTab == 1) youtube = _homeInputController.text.trim();
-    } else {
-       if (_selectedInputTab == 2) notes = _notesController.text.trim();
-       if (_selectedInputTab == 1) youtube = _youtubeController.text.trim();
-    }
-    if (_selectedInputTab == 0 && _selectedFile == null) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please upload a file first!"))); return;
-    }
-    if (_selectedInputTab == 1 && youtube.isEmpty) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please paste a YouTube link!"))); return;
-    }
-    if (_selectedInputTab == 2 && notes.isEmpty) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter some notes!"))); return;
-    }
-    setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 2));
-    setState(() => _isLoading = false);
-    if (mounted) {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => StudyHubScreen(notes: notes, youtubeUrl: youtube, file: _selectedFile)));
-    }
-  }
+  // --- NEW NAVIGATION LOGIC ---
   
-  Future<void> _hostGame() async {
-    setState(() => _isLoading = true);
-    try {
-      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/host-game'));
-      if (_selectedInputTab == 2) request.fields['notes'] = _notesController.text.trim();
-      if (_selectedInputTab == 1) request.fields['youtube_url'] = _youtubeController.text.trim();
-      if (_selectedInputTab == 0 && _selectedFile != null) {
-         if (_selectedFile!.bytes != null) {
-            request.files.add(http.MultipartFile.fromBytes('file', _selectedFile!.bytes!, filename: _selectedFile!.name));
-          } else if (_selectedFile!.path != null) {
-            request.files.add(await http.MultipartFile.fromPath('file', _selectedFile!.path!));
-          }
-      }
-
-      var response = await http.Response.fromStream(await request.send());
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        Navigator.push(context, MaterialPageRoute(builder: (context) => TeacherDashboard(gameCode: data['code'])));
-      } else {
-        throw jsonDecode(response.body)['error'] ?? "Server Error";
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
-    } finally { setState(() => _isLoading = false); }
+  // 1. "Try Note2Quiz" -> Go STRAIGHT to Dashboard (No Login required)
+  void _enterAppDirectly() {
+    Navigator.push(
+      context, 
+      MaterialPageRoute(
+        // If email is null, we pass "Guest" so the dashboard still works
+        builder: (_) => DashboardScreen(email: widget.userEmail ?? "Guest")
+      )
+    );
   }
 
-  Future<void> _joinGame() async {
-    setState(() => _isLoading = true);
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/join-game'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({ 'code': _gameCodeController.text.trim(), 'name': _studentNameController.text.trim() })
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        Navigator.push(context, MaterialPageRoute(builder: (context) => ArenaScreen(
-          battleData: data['quiz'],
-          multiplayerCode: _gameCodeController.text.trim(),
-          playerName: _studentNameController.text.trim(),
-        )));
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Invalid Code!"), backgroundColor: Colors.red));
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Connection Error"), backgroundColor: Colors.red));
-    } finally { setState(() => _isLoading = false); }
-  }
-
-  Future<void> _startLevel(GameLevel level) async {
-    setState(() => _isLoading = true);
-    try {
-      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/generate-notes'));
-      
-      String prompt = "Create a concise, bullet-point revision summary about: ${level.topic}. Focus on key facts relevant for a quiz.";
-      request.fields['notes'] = prompt;
-
-      var response = await http.Response.fromStream(await request.send());
-      
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final notes = data['notes'];
-        
-        if (mounted) {
-          final bool? victory = await Navigator.push(
-            context, 
-            MaterialPageRoute(builder: (context) => RevisionScreen(
-              topic: level.topic,
-              notes: notes,
-              level: level.level,
-              isBoss: level.isBoss,
-            ))
-          );
-
-          if (victory == true) {
-             if (level.level < _levels.length) {
-               setState(() {
-                 int nextLevelIndex = level.level; 
-                 if (nextLevelIndex < _levels.length) {
-                    var old = _levels[nextLevelIndex];
-                    _levels[nextLevelIndex] = GameLevel(
-                      level: old.level,
-                      topic: old.topic,
-                      isBoss: old.isBoss,
-                      isLocked: false 
-                    );
-                 }
-               });
-               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Level Complete! Next level unlocked!"), backgroundColor: Colors.green));
-             } else {
-               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("CONGRATULATIONS! YOU FINISHED ALL LEVELS!"), backgroundColor: Colors.amber));
-             }
-          }
-        }
-      } else {
-        throw "Failed to generate revision notes.";
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Level Error: $e"), backgroundColor: Colors.red));
-    } finally { setState(() => _isLoading = false); }
-  }
-
-  String _getHeaderTitle() {
-    switch (_mainTab) {
-      case 0: return "AI Study Hub";
-      case 1: return "AI Note Taker";
-      case 2: return "AI Flashcard Maker";
-      case 3: return "AI Quiz Generator";
-      case 4: return "Challenge Map";
-      case 5: return "Teacher Host";
-      case 6: return "Join Live Game";
-      default: return "Note2Quiz";
-    }
+  // 2. "Log In" -> Go to Login Screen
+  void _goToLogin() {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
 
   @override
   Widget build(BuildContext context) {
-    bool isGuest = widget.userEmail == null;
-    Color bgColor = _isDarkMode ? const Color(0xFF1E1E2E) : const Color(0xFFF5F6FA);
-    Color cardColor = _isDarkMode ? const Color(0xFF2D2B42) : Colors.white;
-    Color textColor = _isDarkMode ? Colors.white : Colors.black87;
-    Color subTextColor = _isDarkMode ? Colors.white54 : Colors.grey[600]!;
-    
-    // Sidebar colors dependent on Theme
-    Color sidebarColor = _isDarkMode ? const Color(0xFF171717) : const Color(0xFFF9F9F9);
-    Color sidebarTextColor = _isDarkMode ? Colors.white : Colors.black87;
-    Color sidebarIconColor = _isDarkMode ? Colors.white : Colors.black54;
-    Color sidebarDividerColor = _isDarkMode ? Colors.white12 : Colors.black12;
-    Color sidebarHoverColor = _isDarkMode ? Colors.white10 : Colors.black12;
-
-    return Stack(
-      children: [
-        Scaffold(
-          backgroundColor: bgColor, 
-          body: Row(
-            children: [
-              // --- SIDEBAR (Adapts to Theme) ---
-              Container(
-                width: 260,
-                color: sidebarColor,
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () => _openNoteEditor(),
-                          icon: Icon(Icons.add, size: 16, color: sidebarTextColor),
-                          label: Text("New chat", style: TextStyle(color: sidebarTextColor)),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: _isDarkMode ? Colors.white24 : Colors.black12),
-                            alignment: Alignment.centerLeft,
-                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    _buildSidebarItem(Icons.home, "Home", 0, sidebarTextColor, sidebarIconColor, sidebarHoverColor),
-                    _buildSidebarItem(Icons.map, "Challenge Map", 4, sidebarTextColor, sidebarIconColor, sidebarHoverColor),
-                    
-                    Divider(color: sidebarDividerColor),
-
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text("History", style: TextStyle(color: sidebarIconColor, fontSize: 12, fontWeight: FontWeight.bold)),
-                                if (!isGuest)
-                                  InkWell(onTap: _fetchRecords, child: Icon(Icons.refresh, size: 14, color: sidebarIconColor))
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: isGuest 
-                              ? Padding(padding: const EdgeInsets.all(20.0), child: Text("Sign in to save your history.", style: TextStyle(color: sidebarIconColor.withOpacity(0.5), fontSize: 13)))
-                              : _loadingRecords 
-                                ? Center(child: CircularProgressIndicator(strokeWidth: 2, color: sidebarIconColor))
-                                : ListView.builder(
-                                    padding: EdgeInsets.zero,
-                                    itemCount: _records.length,
-                                    itemBuilder: (context, index) {
-                                      final r = _records[index];
-                                      return InkWell(
-                                        onTap: () => _openNoteEditor(r),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                          child: Row(children: [
-                                              Icon(Icons.chat_bubble_outline, size: 14, color: sidebarIconColor),
-                                              const SizedBox(width: 10),
-                                              Expanded(child: Text(r['title'] ?? "Untitled", style: TextStyle(color: sidebarTextColor, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                                          ]),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    Divider(color: sidebarDividerColor),
-
-                    // 4. Bottom User Profile (Click for Settings)
-                    InkWell(
-                      onTap: () => _showUserMenu(isGuest),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        color: Colors.transparent,
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 14,
-                              backgroundColor: isGuest ? Colors.grey : const Color(0xFF6C63FF),
-                              child: Icon(isGuest ? Icons.person : Icons.check, size: 16, color: Colors.white),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                isGuest ? "Guest (Settings)" : (widget.userEmail ?? "User"),
-                                style: TextStyle(color: sidebarTextColor, fontWeight: FontWeight.bold, fontSize: 14),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Icon(Icons.more_horiz, color: sidebarIconColor, size: 18)
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+    return Scaffold(
+      backgroundColor: const Color(0xFF1E1F25),
+      body: Stack(
+        children: [
+          // Background Glow
+          Positioned(
+            top: -150, left: 0, right: 0,
+            child: Center(
+              child: Container(
+                width: 600, height: 600,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF6C63FF).withOpacity(0.08),
+                  boxShadow: [BoxShadow(color: const Color(0xFF6C63FF).withOpacity(0.15), blurRadius: 150, spreadRadius: 50)],
                 ),
               ),
+            ),
+          ),
 
-              // --- MAIN CONTENT AREA ---
-              Expanded(
-                child: _mainTab == 0 
-                ? HomeScreen(
-                    inputController: _homeInputController, 
-                    selectedFile: _selectedFile,
-                    onPickFile: _pickFile,
-                    onStartNoteTaker: () => _switchToTab(1),
-                    onStartFlashcards: () => _switchToTab(2),
-                    onStartQuiz: () => _switchToTab(3),
-                    onStartChallenge: () => _switchToTab(4),
-                    onGenerate: (type) {
-                       setState(() {
-                         _selectedInputTab = type;
-                         if (type == 0) _pickFile(); 
-                         else _startStudy();
-                       });
-                    },
-                  )
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(40),
+          SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // --- NAV BAR ---
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.bolt, color: Color(0xFF6C63FF), size: 30),
+                      const SizedBox(width: 10),
+                      const Text("Note2Quiz", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                      const Spacer(),
+                      
+                      // LOG IN BUTTON (Only shows if not logged in)
+                      if (widget.userEmail == null)
+                        TextButton(
+                          onPressed: _goToLogin, // ✅ Goes to Login Screen
+                          child: const Text("Log In", style: TextStyle(color: Colors.white70))
+                        ),
+
+                      const SizedBox(width: 20),
+                      
+                      // MAIN CTA (Try Note2Quiz)
+                      ElevatedButton(
+                        onPressed: _enterAppDirectly, // ✅ Goes directly to Dashboard
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))
+                        ),
+                        child: const Text("Try Note2Quiz", style: TextStyle(fontWeight: FontWeight.bold)),
+                      )
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 40),
+
+                // --- HERO SECTION ---
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: ScaleTransition(
+                    scale: _scaleAnimation,
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                         Center(
-                          child: Text(_getHeaderTitle(), style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: textColor)),
-                         ),
-                         const SizedBox(height: 40),
-                         if (_mainTab == 4) _buildChallengeMap(cardColor, textColor)
-                         else if (_mainTab == 6) _buildStudentJoinCard(cardColor, textColor, subTextColor)
-                         else if (_mainTab == 5) Container(child: Text("Teacher Dashboard Triggered via Host Game", style: TextStyle(color: textColor))) 
-                         else _buildGeneratorCard(cardColor, textColor, subTextColor),
+                        RichText(
+                          textAlign: TextAlign.center,
+                          text: const TextSpan(
+                            children: [
+                              TextSpan(text: "Understand ", style: TextStyle(fontSize: 64, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -1.5, fontFamily: 'Roboto')),
+                              TextSpan(text: "Anything", style: TextStyle(fontSize: 64, fontWeight: FontWeight.w900, color: Color(0xFF6C63FF), letterSpacing: -1.5, fontFamily: 'Roboto')),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        const SizedBox(
+                          width: 700,
+                          child: Text(
+                            "Your AI-powered research and study partner. Upload documents, YouTube videos, or notes and instantly generate quizzes, flashcards, and mind maps.",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 20, color: Colors.white54, height: 1.6),
+                          ),
+                        ),
+                        const SizedBox(height: 50),
+                        
+                        // BIG CTA BUTTON
+                        MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTap: _enterAppDirectly, // ✅ Goes directly to Dashboard
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 25),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF5A52D5)]),
+                                borderRadius: BorderRadius.circular(50),
+                                boxShadow: [BoxShadow(color: const Color(0xFF6C63FF).withOpacity(0.4), blurRadius: 30, offset: const Offset(0, 10))]
+                              ),
+                              child: const Text("Try Note2Quiz", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-              )
-            ],
+                ),
+
+                const SizedBox(height: 120),
+
+                // --- FEATURES GRID ---
+                const Text("How people are using Note2Quiz", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
+                const SizedBox(height: 60),
+                
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: Wrap(
+                    spacing: 40, runSpacing: 40, alignment: WrapAlignment.center,
+                    children: [
+                      _buildFeatureColumn(Icons.school_outlined, "Power study", "Upload lecture slides, textbooks, and notes. Ask Note2Quiz to create practice exams."),
+                      _buildFeatureColumn(Icons.account_tree_outlined, "Organize thinking", "Turn messy thoughts into structured Mind Maps and Executive Reports automatically."),
+                      _buildFeatureColumn(Icons.lightbulb_outline, "Spark new ideas", "Generate infinite flashcards and gamified quizzes to master any topic in minutes."),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 120),
+
+                // --- MOVING CARDS ---
+                const Text("What functions inside?", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
+                const SizedBox(height: 40),
+                
+                SizedBox(
+                  height: 320, 
+                  child: ListView(
+                    controller: _scrollController,
+                    scrollDirection: Axis.horizontal,
+                    physics: const NeverScrollableScrollPhysics(), 
+                    children: [
+                      const SizedBox(width: 20),
+                      _buildHoverCard("Too many readings?", "😫", Colors.redAccent, "AI Summarizer", "Summarize PDFs in seconds.", Icons.article, Colors.blueAccent),
+                      _buildHoverCard("Can't memorize?", "🧠", Colors.orangeAccent, "Smart Flashcards", "Spaced repetition built-in.", Icons.style, Colors.greenAccent),
+                      _buildHoverCard("Exam tomorrow?", "🔥", Colors.deepOrangeAccent, "Boss Battles", "Gamified practice tests.", Icons.sports_esports, Colors.redAccent),
+                      _buildHoverCard("Messy ideas?", "🕸️", Colors.purpleAccent, "Mind Maps", "Auto-structure your thoughts.", Icons.account_tree, Colors.orangeAccent),
+                      _buildHoverCard("Long lectures?", "📺", Colors.red, "Video to Notes", "Get transcripts instantly.", Icons.play_circle_filled, Colors.white),
+                      _buildHoverCard("Bored students?", "😴", Colors.grey, "Live Games", "Host classroom battles.", Icons.cast_for_education, Colors.tealAccent),
+                      const SizedBox(width: 20),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 100),
+
+                // --- FOOTER ---
+                Container(
+                  padding: const EdgeInsets.all(40),
+                  width: double.infinity,
+                  color: Colors.black12,
+                  child: const Column(
+                    children: [
+                      Icon(Icons.bolt, color: Colors.grey),
+                      SizedBox(height: 10),
+                      Text("Note2Quiz Created by Rexx", style: TextStyle(color: Colors.white30)),
+                    ],
+                  ),
+                )
+              ],
+            ),
           ),
-        ),
-        if (_isLoading) const LoadingOverlay()
-      ],
-    );
-  }
-
-  // --- HELPER UI ---
-  void _switchToTab(int index) => setState(() => _mainTab = index);
-
-  Widget _buildSidebarItem(IconData icon, String label, int index, Color textColor, Color iconColor, Color hoverColor) {
-    bool isActive = _mainTab == index;
-    return InkWell(
-      onTap: () => setState(() => _mainTab = index),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(color: isActive ? hoverColor : Colors.transparent, borderRadius: BorderRadius.circular(6)),
-        child: Row(children: [
-            Icon(icon, color: iconColor, size: 16),
-            const SizedBox(width: 12),
-            Text(label, style: TextStyle(color: textColor, fontSize: 14)),
-        ]),
-      ),
-    );
-  }
-
-  Widget _buildChallengeMap(Color cardColor, Color textColor) {
-    return Center(
-      child: Wrap(
-        spacing: 20, runSpacing: 20, alignment: WrapAlignment.center,
-        children: _levels.map((level) => _buildLevelCard(level, cardColor, textColor)).toList(),
-      ),
-    );
-  }
-
-  Widget _buildLevelCard(GameLevel level, Color cardColor, Color textColor) {
-    return Container(
-      width: 140, padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)]),
-      child: Column(
-        children: [
-          Icon(level.isLocked ? Icons.lock : Icons.star, color: level.isLocked ? Colors.grey : Colors.amber, size: 30),
-          const SizedBox(height: 10),
-          Text("Level ${level.level}", style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-          const SizedBox(height: 10),
-          ElevatedButton(onPressed: level.isLocked ? null : () => _startLevel(level), child: const Text("Play", style: TextStyle(fontSize: 10)))
         ],
       ),
     );
   }
 
-  Widget _buildGeneratorCard(Color cardColor, Color textColor, Color subTextColor) {
+  // --- HELPER WIDGETS ---
+
+  Widget _buildFeatureColumn(IconData icon, String title, String desc) {
     return Container(
+      width: 300,
       padding: const EdgeInsets.all(30),
-      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)]),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.1))
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(mainAxisSize: MainAxisSize.min, children: [
-              _buildInputTab("Upload", 0, textColor),
-              _buildInputTab("YouTube", 1, textColor),
-              _buildInputTab("Text", 2, textColor),
-          ]),
-          const SizedBox(height: 30),
-          if (_selectedInputTab == 1)
-             TextField(controller: _youtubeController, style: TextStyle(color: textColor), decoration: InputDecoration(hintText: "YouTube Link", border: const OutlineInputBorder(), hintStyle: TextStyle(color: subTextColor))),
-          if (_selectedInputTab == 2)
-             TextField(controller: _notesController, maxLines: 5, style: TextStyle(color: textColor), decoration: InputDecoration(hintText: "Notes", border: const OutlineInputBorder(), hintStyle: TextStyle(color: subTextColor))),
-          if (_selectedInputTab == 0)
-             ElevatedButton(onPressed: _pickFile, child: Text(_selectedFile?.name ?? "Upload File")),
+          Icon(icon, color: const Color(0xFF6C63FF), size: 40),
           const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: _startStudy, 
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6C63FF), foregroundColor: Colors.white),
-            child: const Text("Generate")
-          )
+          Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+          const SizedBox(height: 10),
+          Text(desc, style: const TextStyle(fontSize: 15, color: Colors.white70, height: 1.5)),
         ],
       ),
     );
   }
 
-  Widget _buildStudentJoinCard(Color cardColor, Color textColor, Color subTextColor) {
-     return Container(
-       padding: const EdgeInsets.all(30),
-       decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(20)),
-       child: Column(children: [
-         TextField(controller: _gameCodeController, style: TextStyle(color: textColor), decoration: InputDecoration(hintText: "Game Code", hintStyle: TextStyle(color: subTextColor))),
-         const SizedBox(height: 10),
-         TextField(controller: _studentNameController, style: TextStyle(color: textColor), decoration: InputDecoration(hintText: "Name", hintStyle: TextStyle(color: subTextColor))),
-         const SizedBox(height: 20),
-         ElevatedButton(onPressed: _joinGame, child: const Text("Join"))
-       ]),
-     );
-  }
-
-  Widget _buildInputTab(String label, int index, Color textColor) {
-    bool isSelected = _selectedInputTab == index;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedInputTab = index),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+  Widget _buildHoverCard(
+    String qTitle, String qEmoji, Color qColor, 
+    String aTitle, String aDesc, IconData aIcon, Color aColor
+  ) {
+    return HoverCard(
+      initialContent: Container(
+        width: 260, height: 300,
+        padding: const EdgeInsets.all(25),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF6C63FF) : Colors.transparent, 
-          borderRadius: BorderRadius.circular(20),
-          border: isSelected ? null : Border.all(color: Colors.grey.withOpacity(0.5))
+          color: const Color(0xFF2D2E36),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white10),
         ),
-        child: Text(label, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Colors.white : textColor)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(qEmoji, style: const TextStyle(fontSize: 50)),
+            const SizedBox(height: 20),
+            Text(qTitle, textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: qColor)),
+            const SizedBox(height: 10),
+            Text("Hover for answer", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+          ],
+        ),
+      ),
+      hoverContent: Container(
+        width: 280, height: 320, 
+        padding: const EdgeInsets.all(25),
+        decoration: BoxDecoration(
+          color: aColor.withOpacity(0.15), 
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: aColor),
+          boxShadow: [BoxShadow(color: aColor.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))]
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircleAvatar(radius: 30, backgroundColor: aColor, child: Icon(aIcon, color: Colors.white, size: 30)),
+            const SizedBox(height: 20),
+            Text(aTitle, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+            const SizedBox(height: 10),
+            Text(aDesc, textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, color: Colors.white70)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- HOVER CARD WIDGET ---
+class HoverCard extends StatefulWidget {
+  final Widget initialContent;
+  final Widget hoverContent;
+  const HoverCard({super.key, required this.initialContent, required this.hoverContent});
+
+  @override
+  State<HoverCard> createState() => _HoverCardState();
+}
+
+class _HoverCardState extends State<HoverCard> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          switchInCurve: Curves.easeOutBack,
+          switchOutCurve: Curves.easeInBack,
+          child: _isHovered 
+            ? KeyedSubtree(key: const ValueKey("hover"), child: widget.hoverContent) 
+            : KeyedSubtree(key: const ValueKey("initial"), child: widget.initialContent),
+        ),
       ),
     );
   }

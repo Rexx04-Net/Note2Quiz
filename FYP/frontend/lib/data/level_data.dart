@@ -34,17 +34,14 @@ List<GameLevel> generateLevels() {
     // (Level 1-3 = Index 0, Level 4-6 = Index 1, etc.)
     int topicIndex = (i - 1) ~/ 3; 
     
-    // Every 3rd level is a Boss Level (Harder)
-    bool isBoss = (i % 3 == 0);
-    
+    // Safety check in case we add more levels than topics
+    String currentTopic = topicIndex < topics.length ? topics[topicIndex] : "Advanced IT";
+
     levels.add(GameLevel(
       level: i,
-      // Safely get the topic (using modulo just in case)
-      topic: topics[topicIndex % topics.length],
-      isBoss: isBoss,
-      // For testing, Level 1 is unlocked. 
-      // In a real app with Firebase, you would check the user's progress here.
-      isLocked: i > 1, 
+      topic: currentTopic,
+      isBoss: i % 3 == 0, // Every 3rd level is a Boss Level (3, 6, 9...)
+      isLocked: i != 1,   // Only Level 1 is unlocked initially
     ));
   }
   return levels;

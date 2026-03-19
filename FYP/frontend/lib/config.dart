@@ -1,9 +1,10 @@
-// --- CONFIGURATION ---
-// 1. Run 'ngrok http 5000' in your terminal.
-// 2. Copy the 'https' Forwarding URL (e.g., https://a1b2-c3d4.ngrok-free.app).
-// 3. Paste it below.
+import 'package:flutter/foundation.dart'; // ✅ THIS is what was missing!
 
-const String baseUrl = 'https://countryfied-dario-addictively.ngrok-free.dev'; 
+// AUTOMATICALLY DETECT CORRECT ADDRESS
+// 1. Web uses localhost
+// 2. Android Emulator uses 10.0.2.2
+// 3. iOS Simulator uses localhost
 
-// fallback for local testing without sharing
-// const String baseUrl = 'http://127.0.0.1:5000';
+final String baseUrl = kIsWeb 
+    ? 'http://127.0.0.1:5000' // (Change to 'http://localhost:5000' if 127.0.0.1 still gives network errors)
+    : 'http://10.0.2.2:5000';
