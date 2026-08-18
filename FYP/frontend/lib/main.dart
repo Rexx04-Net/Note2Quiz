@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart'; 
-import 'package:firebase_core/firebase_core.dart'; 
+import 'package:firebase_core/firebase_core.dart';
 import 'dart:async';
-import 'screens/lobby_screen.dart'; 
+import 'screens/lobby_screen.dart';
+import 'state/app_settings_controller.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,25 +20,34 @@ void main() async {
     ),
   );
 
-  runApp(const StudyApp());
+  final settingsController = AppSettingsController();
+  await settingsController.load();
+
+  runApp(StudyApp(controller: settingsController));
 }
 
 class StudyApp extends StatelessWidget {
-  const StudyApp({super.key});
+  const StudyApp({super.key, required this.controller});
+
+  final AppSettingsController controller;
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Note2Quiz Pro',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        primaryColor: const Color(0xFF6C63FF),
-        scaffoldBackgroundColor: const Color(0xFF1E1E2E),
-        useMaterial3: true,
-        fontFamily: GoogleFonts.roboto().fontFamily, 
-      ),
-      home: const SplashScreen(),
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        return AppSettingsScope(
+          controller: controller,
+          child: MaterialApp(
+            title: 'Note2Quiz Pro',
+            debugShowCheckedModeBanner: false,
+            theme: StudyAppTheme.lightTheme(),
+            darkTheme: StudyAppTheme.darkTheme(),
+            themeMode: controller.themeMode,
+            home: const SplashScreen(),
+          ),
+        );
+      },
     );
   }
 }
@@ -76,8 +86,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF1E1E2E),
+      backgroundColor: colors.background,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -86,17 +99,26 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               scale: _scaleAnimation,
               child: Container(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(color: const Color(0xFF6C63FF).withOpacity(0.2), shape: BoxShape.circle),
-                child: const Icon(Icons.bolt, size: 80, color: Color(0xFF6C63FF)),
+                decoration: BoxDecoration(
+                  color: colors.primarySoft,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.bolt, size: 80, color: scheme.primary),
               ),
             ),
             const SizedBox(height: 20),
             FadeTransition(
               opacity: _opacityAnimation,
-              child: const Text("NOTE 2 QUIZ", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 3, color: Colors.white)),
+              child: Text(
+                "NOTE 2 QUIZ",
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 3,
+                    ),
+              ),
             ),
             const SizedBox(height: 50),
-            const CircularProgressIndicator(color: Color(0xFF6C63FF), strokeWidth: 3),
+            CircularProgressIndicator(color: scheme.primary, strokeWidth: 3),
           ],
         ),
       ),

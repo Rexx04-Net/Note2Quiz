@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 class FlashcardView extends StatefulWidget {
   final List<dynamic> flashcards;
@@ -38,31 +39,57 @@ class _FlashcardViewState extends State<FlashcardView> {
 
   // --- UI FOR THE FRONT OF THE CARD (QUESTION) ---
   Widget _buildFrontCard(String text) {
+    final colors = context.appColors;
+    final scheme = Theme.of(context).colorScheme;
+
     return Container(
       width: 350,
       height: 450,
       padding: const EdgeInsets.all(30),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2A35), // Dark card background
+        color: colors.surfaceAlt,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF6C63FF).withOpacity(0.5), width: 2),
+        border: Border.all(color: scheme.primary.withOpacity(0.5), width: 2),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 10))],
       ),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(color: const Color(0xFF6C63FF).withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
-            child: const Text("QUESTION (FRONT)", style: TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.5)),
+            decoration: BoxDecoration(
+              color: colors.primarySoft,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              "QUESTION (FRONT)",
+              style: TextStyle(
+                color: scheme.primary,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                letterSpacing: 1.5,
+              ),
+            ),
           ),
           const Spacer(),
           SingleChildScrollView(
-            child: Text(text, textAlign: TextAlign.center, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white, height: 1.4)),
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: scheme.onSurface,
+                height: 1.4,
+              ),
+            ),
           ),
           const Spacer(),
-          const Icon(Icons.touch_app, color: Colors.white24, size: 24),
+          Icon(Icons.touch_app, color: colors.subtleText, size: 24),
           const SizedBox(height: 5),
-          const Text("Tap to reveal answer", style: TextStyle(color: Colors.white24, fontSize: 12)),
+          Text(
+            "Tap to reveal answer",
+            style: TextStyle(color: colors.subtleText, fontSize: 12),
+          ),
         ],
       ),
     );
@@ -70,12 +97,14 @@ class _FlashcardViewState extends State<FlashcardView> {
 
   // --- UI FOR THE BACK OF THE CARD (ANSWER) ---
   Widget _buildBackCard(String text) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Container(
       width: 350,
       height: 450,
       padding: const EdgeInsets.all(30),
       decoration: BoxDecoration(
-        color: const Color(0xFF6C63FF), // Purple accent background
+        color: scheme.primary,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 10))],
       ),
@@ -98,8 +127,16 @@ class _FlashcardViewState extends State<FlashcardView> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final scheme = Theme.of(context).colorScheme;
+
     if (widget.flashcards.isEmpty) {
-      return const Center(child: Text("No flashcards available.", style: TextStyle(color: Colors.white)));
+      return Center(
+        child: Text(
+          "No flashcards available.",
+          style: TextStyle(color: scheme.onSurface),
+        ),
+      );
     }
 
     final card = widget.flashcards[_currentIndex];
@@ -120,14 +157,25 @@ class _FlashcardViewState extends State<FlashcardView> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text("Flashcards", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
-                    Text("Card ${_currentIndex + 1} of ${widget.flashcards.length}", style: const TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.bold)),
+                    Text(
+                      "Flashcards",
+                      style: TextStyle(color: colors.mutedText, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      "Card ${_currentIndex + 1} of ${widget.flashcards.length}",
+                      style: TextStyle(color: scheme.primary, fontWeight: FontWeight.bold),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 10),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(value: progress, backgroundColor: Colors.white10, valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)), minHeight: 6),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: colors.border,
+                    valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+                    minHeight: 6,
+                  ),
                 ),
               ],
             ),
@@ -170,11 +218,14 @@ class _FlashcardViewState extends State<FlashcardView> {
             children: [
               // Previous Button
               Container(
-                decoration: BoxDecoration(color: _currentIndex > 0 ? const Color(0xFF2A2A35) : Colors.transparent, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: _currentIndex > 0 ? colors.surfaceAlt : Colors.transparent,
+                  shape: BoxShape.circle,
+                ),
                 child: IconButton(
                   onPressed: _currentIndex > 0 ? _prevCard : null,
                   icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-                  color: _currentIndex > 0 ? Colors.white : Colors.white24,
+                  color: _currentIndex > 0 ? scheme.onSurface : colors.subtleText,
                   padding: const EdgeInsets.all(15),
                 ),
               ),
@@ -183,20 +234,23 @@ class _FlashcardViewState extends State<FlashcardView> {
               // Flip Button
               FloatingActionButton(
                 onPressed: _flipCard,
-                backgroundColor: const Color(0xFF6C63FF),
+                backgroundColor: scheme.primary,
                 elevation: 10,
-                child: const Icon(Icons.flip_camera_android, color: Colors.white, size: 28),
+                child: Icon(Icons.flip_camera_android, color: scheme.onPrimary, size: 28),
               ),
               
               const SizedBox(width: 30),
               
               // Next Button
               Container(
-                decoration: BoxDecoration(color: _currentIndex < widget.flashcards.length - 1 ? const Color(0xFF2A2A35) : Colors.transparent, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: _currentIndex < widget.flashcards.length - 1 ? colors.surfaceAlt : Colors.transparent,
+                  shape: BoxShape.circle,
+                ),
                 child: IconButton(
                   onPressed: _currentIndex < widget.flashcards.length - 1 ? _nextCard : null,
                   icon: const Icon(Icons.arrow_forward_ios, size: 20),
-                  color: _currentIndex < widget.flashcards.length - 1 ? Colors.white : Colors.white24,
+                  color: _currentIndex < widget.flashcards.length - 1 ? scheme.onSurface : colors.subtleText,
                   padding: const EdgeInsets.all(15),
                 ),
               ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import '../theme/app_theme.dart';
 
 class LoadingOverlay extends StatefulWidget {
   const LoadingOverlay({super.key});
@@ -68,14 +69,17 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final scheme = Theme.of(context).colorScheme;
+
     return Container(
-      color: const Color(0xFF1E1F25).withOpacity(0.95), // Dark sleek overlay
+      color: colors.overlay,
       child: Center(
         child: Container(
           width: 320,
           padding: const EdgeInsets.all(40),
           decoration: BoxDecoration(
-            color: const Color(0xFF2D2E36), // Slightly lighter card
+            color: colors.surface,
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
@@ -84,7 +88,7 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                 offset: const Offset(0, 10),
               )
             ],
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: colors.border),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -106,7 +110,7 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                           child: CircularProgressIndicator(
                             value: 1.0,
                             strokeWidth: 8,
-                            color: Colors.white.withOpacity(0.05),
+                            color: colors.border,
                           ),
                         ),
                         // Progress Circle
@@ -116,7 +120,7 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                           child: CircularProgressIndicator(
                             value: _animation.value,
                             strokeWidth: 8,
-                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)),
+                            valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
                             backgroundColor: Colors.transparent,
                             strokeCap: StrokeCap.round,
                           ),
@@ -127,10 +131,10 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                           children: [
                             Text(
                               "${(_animation.value * 100).toInt()}%",
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 28,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                                color: scheme.onSurface,
                               ),
                             ),
                           ],
@@ -147,7 +151,7 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
               Text(
                 "AI IS WORKING",
                 style: TextStyle(
-                  color: const Color(0xFF6C63FF).withOpacity(0.8),
+                  color: scheme.primary,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 2,
@@ -160,8 +164,8 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                   "$_loadingText${"." * _dotCount}",
                   key: ValueKey<String>(_loadingText), // Animate when text changes
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white70,
+                  style: TextStyle(
+                    color: colors.mutedText,
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
                   ),

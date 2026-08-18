@@ -5,9 +5,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import '../config.dart';
 import 'quiz_screen.dart';
+import 'settings_screen.dart';
+import 'study_plan_screen.dart';
 import 'teacher_leaderboard_screen.dart';
 import '../widgets/flashcard_view.dart';
 import '../widgets/loading_overlay.dart';
+import '../state/app_settings_controller.dart';
+import '../theme/app_theme.dart';
 
 class NotebookScreen extends StatefulWidget {
   final Map<String, dynamic> notebook;
@@ -40,43 +44,49 @@ class _NotebookScreenState extends State<NotebookScreen> {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'pptx'],
+      allowMultiple: true,
       withData: true,
     );
 
-    if (result == null) return;
+    if (result == null || result.files.isEmpty) return;
 
     setState(() => _isLoading = true);
 
-    final uri = Uri.parse('$baseUrl/add-source');
-    final request = http.MultipartRequest('POST', uri);
-    request.fields['notebook_id'] = widget.notebook['id'];
-    request.fields['type'] = 'file';
+    int successCount = 0;
+    for (final file in result.files) {
+      final uri = Uri.parse('$baseUrl/add-source');
+      final request = http.MultipartRequest('POST', uri);
+      request.fields['notebook_id'] = widget.notebook['id'];
+      request.fields['type'] = 'file';
 
-    final file = result.files.first;
-    if (kIsWeb || file.bytes != null) {
-      request.files.add(
-        http.MultipartFile.fromBytes('file', file.bytes!, filename: file.name),
-      );
-    } else if (file.path != null) {
-      request.files.add(await http.MultipartFile.fromPath('file', file.path!));
+      if (kIsWeb || file.bytes != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes('file', file.bytes!, filename: file.name),
+        );
+      } else if (file.path != null) {
+        request.files.add(await http.MultipartFile.fromPath('file', file.path!));
+      }
+
+      try {
+        final response = await request.send();
+        if (response.statusCode == 200) {
+          final respStr = await response.stream.bytesToString();
+          final newSource = jsonDecode(respStr);
+          setState(() {
+            _sources.add(newSource);
+            _selectedTool = 'overview';
+          });
+          successCount++;
+        }
+      } catch (e) {
+        debugPrint('Error uploading ${file.name}: $e');
+      }
     }
 
-    try {
-      final response = await request.send();
-      if (response.statusCode == 200) {
-        final respStr = await response.stream.bytesToString();
-        final newSource = jsonDecode(respStr);
-        setState(() {
-          _sources.add(newSource);
-          _selectedTool = 'overview';
-        });
-      } else {
-        _showError('Failed to upload source');
-      }
-    } catch (e) {
-      _showError('Connection error: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoading = false);
+
+    if (successCount == 0) {
+      _showError('Failed to upload selected source file(s)');
     }
   }
 
@@ -85,6 +95,8 @@ class _NotebookScreenState extends State<NotebookScreen> {
       _showError('Add at least one source first.');
       return;
     }
+
+    final settings = AppSettingsScope.of(context);
 
     setState(() {
       _isLoading = true;
@@ -100,6 +112,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
           'notebook_id': widget.notebook['id'],
           'tool_type': toolType,
           'difficulty': _selectedDifficulty,
+          'output_language': settings.outputLanguage,
         }),
       );
 
@@ -148,33 +161,185 @@ class _NotebookScreenState extends State<NotebookScreen> {
     );
   }
 
+  Future<void> _showSingleNotebookRoadmapDialog() async {
+    if (_sources.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one source file or text first.')),
+      );
+      return;
+    }
+
+    String durationOption = '3 Days';
+    double dailyHours = 2.0;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              backgroundColor: context.appColors.surfaceAlt,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              title: Row(
+                children: [
+                  const Icon(Icons.alt_route, color: Colors.purpleAccent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Roadmap for ${widget.notebook['title'] ?? 'Notebook'}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('1. Select Plan Duration:', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: ['1 Day', '3 Days', '7 Days', 'AI Automated'].map((opt) {
+                      final isSelected = durationOption == opt;
+                      return ChoiceChip(
+                        label: Text(opt),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          if (selected) setModalState(() => durationOption = opt);
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const Divider(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('2. Available Daily Time:', style: TextStyle(fontWeight: FontWeight.w600)),
+                      Text('${dailyHours.toStringAsFixed(1)} hrs/day', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.purpleAccent)),
+                    ],
+                  ),
+                  Slider(
+                    value: dailyHours,
+                    min: 0.5,
+                    max: 8.0,
+                    divisions: 15,
+                    onChanged: (val) => setModalState(() => dailyHours = val),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _generateSingleRoadmap(durationOption, dailyHours);
+                  },
+                  child: const Text('Generate Active Plan'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _generateSingleRoadmap(String durationOption, double dailyHours) async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/generate-active-plan'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': widget.notebook['user_email'] ?? 'guest',
+          'notebook_ids': [widget.notebook['id']],
+          'duration_option': durationOption,
+          'daily_hours': dailyHours,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final planData = jsonDecode(response.body);
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => StudyPlanScreen(
+              initialPlan: planData,
+              userEmail: widget.notebook['user_email'] ?? 'guest',
+            ),
+          ),
+        );
+      } else {
+        final err = jsonDecode(response.body);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(err['error'] ?? 'Failed to generate roadmap.')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error generating single notebook roadmap: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final scheme = Theme.of(context).colorScheme;
+    final settings = AppSettingsScope.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF12121A),
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF12121A),
-        elevation: 0,
         titleSpacing: 20,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(widget.notebook['title'] ?? 'Notebook'),
-            const SizedBox(height: 2),
+            const SizedBox(height: 4),
             Text(
-              '${_sources.length} source${_sources.length == 1 ? '' : 's'}',
-              style: const TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.normal),
+              '${_sources.length} source${_sources.length == 1 ? '' : 's'} | Output: ${settings.outputLanguage}',
+              style: TextStyle(
+                color: colors.mutedText,
+                fontSize: 12,
+                fontWeight: FontWeight.normal,
+              ),
             ),
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SettingsScreen(
+                    userEmail: (widget.notebook['user_email'] ?? 'guest').toString(),
+                    settingsController: AppSettingsScope.of(context),
+                  ),
+                ),
+              );
+            },
+            icon: Icon(Icons.settings_outlined, color: colors.mutedText),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 20),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: _selectedDifficulty,
-                dropdownColor: const Color(0xFF232334),
-                style: const TextStyle(color: Colors.white),
+                dropdownColor: colors.surfaceAlt,
+                style: TextStyle(color: scheme.onSurface),
                 items: const [
                   DropdownMenuItem(value: 'Easy', child: Text('Easy')),
                   DropdownMenuItem(value: 'Standard', child: Text('Standard')),
@@ -204,26 +369,33 @@ class _NotebookScreenState extends State<NotebookScreen> {
   }
 
   Widget _buildSourcesRail() {
+    final colors = context.appColors;
+    final scheme = Theme.of(context).colorScheme;
+
     return Container(
       width: 300,
       margin: const EdgeInsets.fromLTRB(20, 12, 12, 20),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A26),
+        color: colors.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Sources',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'Upload notes, slides, or study material',
-            style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+            style: TextStyle(color: colors.mutedText, fontSize: 12, height: 1.4),
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -231,7 +403,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
             child: FilledButton.icon(
               onPressed: _uploadSource,
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF6C63FF),
+                backgroundColor: scheme.primary,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
@@ -246,23 +418,30 @@ class _NotebookScreenState extends State<NotebookScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.03),
+                      color: colors.surfaceAlt,
                       borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white10),
+                      border: Border.all(color: colors.border),
                     ),
-                    child: const Column(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.description_outlined, color: Colors.white38),
-                        SizedBox(height: 12),
+                        Icon(Icons.description_outlined, color: colors.subtleText),
+                        const SizedBox(height: 12),
                         Text(
                           'No sources yet',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            color: scheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        SizedBox(height: 8),
+                        const SizedBox(height: 8),
                         Text(
                           'Add a PDF or PPTX to generate quizzes, flashcards, mind maps, and summaries.',
-                          style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5),
+                          style: TextStyle(
+                            color: colors.mutedText,
+                            fontSize: 12,
+                            height: 1.5,
+                          ),
                         ),
                       ],
                     ),
@@ -277,23 +456,30 @@ class _NotebookScreenState extends State<NotebookScreen> {
                       return Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.04),
+                          color: colors.surfaceAlt,
                           borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: Colors.white10),
+                          border: Border.all(color: colors.border),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                const Icon(Icons.insert_drive_file_outlined, color: Color(0xFF9C96FF), size: 18),
+                                Icon(
+                                  Icons.insert_drive_file_outlined,
+                                  color: colors.primaryText,
+                                  size: 18,
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     source['title'] ?? 'Untitled source',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                    style: TextStyle(
+                                      color: scheme.onSurface,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                                 const Icon(Icons.check_circle, color: Colors.greenAccent, size: 16),
@@ -302,7 +488,11 @@ class _NotebookScreenState extends State<NotebookScreen> {
                             const SizedBox(height: 10),
                             Text(
                               preview.isEmpty ? 'Source imported successfully.' : preview,
-                              style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.4),
+                              style: TextStyle(
+                                color: colors.mutedText,
+                                fontSize: 12,
+                                height: 1.4,
+                              ),
                               maxLines: 4,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -318,26 +508,76 @@ class _NotebookScreenState extends State<NotebookScreen> {
   }
 
   Widget _buildActionRail() {
+    final colors = context.appColors;
+    final scheme = Theme.of(context).colorScheme;
+    final settings = AppSettingsScope.of(context);
+
     return Container(
       width: 300,
       margin: const EdgeInsets.fromLTRB(12, 12, 20, 20),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A26),
+        color: colors.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Study actions',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: scheme.onSurface,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'Move from understanding to active practice',
-            style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+            style: TextStyle(color: colors.mutedText, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colors.surfaceAlt,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colors.border),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.translate_rounded, color: colors.primaryText, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Generating in ${settings.outputLanguage}',
+                    style: TextStyle(
+                      color: scheme.onSurface,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          _buildStageLabel('Active AI Roadmap'),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purple.shade700,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              onPressed: _showSingleNotebookRoadmapDialog,
+              icon: const Icon(Icons.alt_route),
+              label: const Text('Active Study Roadmap', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
           ),
           const SizedBox(height: 18),
           _buildStageLabel('Understand'),
@@ -355,21 +595,28 @@ class _NotebookScreenState extends State<NotebookScreen> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFF6C63FF).withOpacity(0.12),
+              color: colors.primarySoft,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFF6C63FF).withOpacity(0.18)),
+              border: Border.all(color: scheme.primary.withOpacity(0.25)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Why Note2Quiz feels different',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: scheme.onSurface,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'This workspace turns notes into practice. Generate solo quizzes or launch live classroom challenges from the same material.',
-                  style: TextStyle(color: Colors.white.withOpacity(0.68), fontSize: 12, height: 1.5),
+                  style: TextStyle(
+                    color: colors.mutedText,
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
                 ),
               ],
             ),
@@ -380,12 +627,14 @@ class _NotebookScreenState extends State<NotebookScreen> {
   }
 
   Widget _buildMainContent() {
+    final colors = context.appColors;
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF161621),
+        color: colors.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: colors.border),
       ),
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 250),
@@ -395,6 +644,9 @@ class _NotebookScreenState extends State<NotebookScreen> {
   }
 
   Widget _buildCenterContent() {
+    final colors = context.appColors;
+    final scheme = Theme.of(context).colorScheme;
+
     if (_selectedTool == 'quiz' && _generatedData is List) {
       return _buildQuizReadyState(_generatedData as List<dynamic>);
     }
@@ -414,8 +666,8 @@ class _NotebookScreenState extends State<NotebookScreen> {
           children: [
             Text(
               _selectedTool.toUpperCase(),
-              style: const TextStyle(
-                color: Colors.white54,
+              style: TextStyle(
+                color: colors.mutedText,
                 letterSpacing: 1.2,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -426,7 +678,11 @@ class _NotebookScreenState extends State<NotebookScreen> {
               child: SingleChildScrollView(
                 child: Text(
                   _generatedData.toString(),
-                  style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.7),
+                  style: TextStyle(
+                    color: scheme.onSurface,
+                    fontSize: 16,
+                    height: 1.7,
+                  ),
                 ),
               ),
             ),
@@ -447,28 +703,36 @@ class _NotebookScreenState extends State<NotebookScreen> {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6C63FF).withOpacity(0.12),
+                    color: colors.primarySoft,
                     borderRadius: BorderRadius.circular(24),
                   ),
-                  child: const Icon(Icons.auto_awesome_rounded, size: 44, color: Color(0xFF9C96FF)),
+                  child: Icon(
+                    Icons.auto_awesome_rounded,
+                    size: 44,
+                    color: colors.primaryText,
+                  ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
+                Text(
                   'Turn notes into mastery',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: scheme.onSurface,
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   'Upload your study material, then generate summaries, flashcards, quizzes, and live classroom challenges in one place.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white60, fontSize: 15, height: 1.6),
+                  style: TextStyle(color: colors.mutedText, fontSize: 15, height: 1.6),
                 ),
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: _uploadSource,
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF6C63FF),
+                    backgroundColor: scheme.primary,
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
@@ -487,14 +751,18 @@ class _NotebookScreenState extends State<NotebookScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Ready to study',
-            style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: scheme.onSurface,
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 10),
           Text(
             'You have ${_sources.length} source${_sources.length == 1 ? '' : 's'} uploaded. Choose how you want to learn next.',
-            style: const TextStyle(color: Colors.white60, fontSize: 15, height: 1.5),
+            style: TextStyle(color: colors.mutedText, fontSize: 15, height: 1.5),
           ),
           const SizedBox(height: 24),
           Expanded(
@@ -537,6 +805,9 @@ class _NotebookScreenState extends State<NotebookScreen> {
   }
 
   Widget _buildQuizReadyState(List<dynamic> quizData) {
+    final colors = context.appColors;
+    final scheme = Theme.of(context).colorScheme;
+
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
@@ -554,16 +825,20 @@ class _NotebookScreenState extends State<NotebookScreen> {
                 child: const Icon(Icons.task_alt_rounded, color: Colors.greenAccent, size: 52),
               ),
               const SizedBox(height: 22),
-              const Text(
+              Text(
                 'Quiz generated successfully',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: scheme.onSurface,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 12),
               Text(
                 '${quizData.length} questions are ready. Use it for solo practice or turn it into a live classroom game.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white60, fontSize: 15, height: 1.6),
+                style: TextStyle(color: colors.mutedText, fontSize: 15, height: 1.6),
               ),
               const SizedBox(height: 28),
               Wrap(
@@ -588,7 +863,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
                       MaterialPageRoute(builder: (_) => QuizScreen(quizData: quizData)),
                     ),
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF6C63FF),
+                      backgroundColor: scheme.primary,
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
@@ -621,14 +896,17 @@ class _NotebookScreenState extends State<NotebookScreen> {
     required IconData icon,
     required VoidCallback onTap,
   }) {
+    final colors = context.appColors;
+    final scheme = Theme.of(context).colorScheme;
+
     return InkWell(
       borderRadius: BorderRadius.circular(22),
       onTap: onTap,
       child: Ink(
         decoration: BoxDecoration(
-          color: const Color(0xFF1D1D2B),
+          color: colors.surfaceAlt,
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: Colors.white10),
+          border: Border.all(color: colors.border),
         ),
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -638,15 +916,25 @@ class _NotebookScreenState extends State<NotebookScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6C63FF).withOpacity(0.14),
+                  color: colors.primarySoft,
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(icon, color: const Color(0xFF9C96FF)),
+                child: Icon(icon, color: colors.primaryText),
               ),
               const SizedBox(height: 18),
-              Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                title,
+                style: TextStyle(
+                  color: scheme.onSurface,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 10),
-              Text(subtitle, style: const TextStyle(color: Colors.white60, fontSize: 13, height: 1.5)),
+              Text(
+                subtitle,
+                style: TextStyle(color: colors.mutedText, fontSize: 13, height: 1.5),
+              ),
               const Spacer(),
               const Row(
                 children: [
@@ -663,16 +951,19 @@ class _NotebookScreenState extends State<NotebookScreen> {
   }
 
   Widget _buildStudioBtn(String title, String subtitle, IconData icon, String type) {
+    final colors = context.appColors;
+    final scheme = Theme.of(context).colorScheme;
+
     return InkWell(
       borderRadius: BorderRadius.circular(18),
       onTap: () => _generateContent(type),
       child: Ink(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: _selectedTool == type ? const Color(0xFF26263A) : Colors.white.withOpacity(0.04),
+          color: _selectedTool == type ? colors.primarySoft : colors.surfaceAlt,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: _selectedTool == type ? const Color(0xFF6C63FF) : Colors.white10,
+            color: _selectedTool == type ? scheme.primary : colors.border,
           ),
         ),
         child: Row(
@@ -681,19 +972,28 @@ class _NotebookScreenState extends State<NotebookScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFF6C63FF).withOpacity(0.14),
+                color: colors.primarySoft,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: const Color(0xFF9C96FF), size: 18),
+              child: Icon(icon, color: colors.primaryText, size: 18),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.4)),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: colors.mutedText, fontSize: 12, height: 1.4),
+                  ),
                 ],
               ),
             ),
@@ -704,10 +1004,12 @@ class _NotebookScreenState extends State<NotebookScreen> {
   }
 
   Widget _buildStageLabel(String label) {
+    final colors = context.appColors;
+
     return Text(
       label.toUpperCase(),
-      style: const TextStyle(
-        color: Colors.white38,
+      style: TextStyle(
+        color: colors.subtleText,
         fontSize: 11,
         letterSpacing: 1.2,
         fontWeight: FontWeight.w600,
@@ -716,18 +1018,20 @@ class _NotebookScreenState extends State<NotebookScreen> {
   }
 
   Widget _actionPill(IconData icon, String label) {
+    final colors = context.appColors;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: colors.surfaceAlt,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: Colors.white70),
+          Icon(icon, size: 16, color: colors.mutedText),
           const SizedBox(width: 8),
-          Text(label, style: const TextStyle(color: Colors.white70)),
+          Text(label, style: TextStyle(color: colors.mutedText)),
         ],
       ),
     );

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 class QuizScreen extends StatefulWidget {
   final List<dynamic> quizData;
@@ -68,11 +69,14 @@ class _QuizScreenState extends State<QuizScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF232334),
+        backgroundColor: context.appColors.surfaceAlt,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text(
+        title: Text(
           'Practice complete',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurface,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -80,25 +84,29 @@ class _QuizScreenState extends State<QuizScreen> {
           children: [
             Text(
               'Score: $_score points',
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               'Correct: $_correctAnswers / $total',
-              style: const TextStyle(color: Colors.white70, fontSize: 15),
+              style: TextStyle(color: context.appColors.mutedText, fontSize: 15),
             ),
             const SizedBox(height: 8),
             Text(
               'Accuracy: $percent%',
-              style: const TextStyle(color: Colors.white70, fontSize: 15),
+              style: TextStyle(color: context.appColors.mutedText, fontSize: 15),
             ),
             const SizedBox(height: 18),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.04),
+                color: context.appColors.surface,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white10),
+                border: Border.all(color: context.appColors.border),
               ),
               child: Text(
                 percent >= 80
@@ -106,7 +114,7 @@ class _QuizScreenState extends State<QuizScreen> {
                     : percent >= 50
                         ? 'Decent progress. Review the weak areas and try again.'
                         : 'You should revisit the source material and retry this quiz.',
-                style: const TextStyle(color: Colors.white70, height: 1.5),
+                style: TextStyle(color: context.appColors.mutedText, height: 1.5),
               ),
             ),
           ],
@@ -124,7 +132,9 @@ class _QuizScreenState extends State<QuizScreen> {
               Navigator.pop(context);
               Navigator.pop(context);
             },
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF6C63FF)),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+            ),
             child: const Text('Finish'),
           ),
         ],
@@ -132,8 +142,8 @@ class _QuizScreenState extends State<QuizScreen> {
     );
   }
 
-  Color _getButtonColor(String option) {
-    if (!_isAnswered) return const Color(0xFF232334);
+  Color _getButtonColor(String option, Color defaultColor) {
+    if (!_isAnswered) return defaultColor;
 
     final correctAnswer = widget.quizData[_currentIndex]['answer'];
 
@@ -143,11 +153,11 @@ class _QuizScreenState extends State<QuizScreen> {
     if (option == _selectedAnswer && option != correctAnswer) {
       return Colors.redAccent.withOpacity(0.85);
     }
-    return const Color(0xFF232334).withOpacity(0.45);
+    return defaultColor.withOpacity(0.45);
   }
 
-  Color _getBorderColor(String option) {
-    if (!_isAnswered) return Colors.white10;
+  Color _getBorderColor(String option, Color defaultColor) {
+    if (!_isAnswered) return defaultColor;
     final correctAnswer = widget.quizData[_currentIndex]['answer'];
     if (option == correctAnswer) return Colors.greenAccent;
     if (option == _selectedAnswer && option != correctAnswer) return Colors.redAccent;
@@ -164,6 +174,8 @@ class _QuizScreenState extends State<QuizScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final scheme = Theme.of(context).colorScheme;
     final currentQuestion = widget.quizData[_currentIndex];
     final totalQuestions = widget.quizData.length;
     final progress = (_currentIndex + 1) / totalQuestions;
@@ -171,16 +183,14 @@ class _QuizScreenState extends State<QuizScreen> {
     final explanation = (currentQuestion['explanation'] ?? '').toString();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF12121A),
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white54),
+          icon: Icon(Icons.close, color: colors.mutedText),
           onPressed: () => Navigator.pop(context),
         ),
         centerTitle: true,
-        title: const Text('Solo Practice', style: TextStyle(color: Colors.white70, fontSize: 16)),
+        title: Text('Solo Practice', style: TextStyle(color: colors.mutedText, fontSize: 16)),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 20),
@@ -191,7 +201,11 @@ class _QuizScreenState extends State<QuizScreen> {
                   const SizedBox(width: 5),
                   Text(
                     '$_score',
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: scheme.onSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
@@ -213,11 +227,11 @@ class _QuizScreenState extends State<QuizScreen> {
                     children: [
                       Text(
                         'Question ${_currentIndex + 1} of $totalQuestions',
-                        style: const TextStyle(color: Colors.white70, fontSize: 15),
+                        style: TextStyle(color: colors.mutedText, fontSize: 15),
                       ),
                       Text(
                         '${(progress * 100).round()}%',
-                        style: const TextStyle(color: Colors.white38, fontSize: 13),
+                        style: TextStyle(color: colors.subtleText, fontSize: 13),
                       ),
                     ],
                   ),
@@ -227,8 +241,8 @@ class _QuizScreenState extends State<QuizScreen> {
                     child: LinearProgressIndicator(
                       value: progress,
                       minHeight: 8,
-                      backgroundColor: Colors.white10,
-                      valueColor: const AlwaysStoppedAnimation(Color(0xFF6C63FF)),
+                      backgroundColor: colors.border,
+                      valueColor: AlwaysStoppedAnimation(scheme.primary),
                     ),
                   ),
                   const SizedBox(height: 28),
@@ -236,14 +250,14 @@ class _QuizScreenState extends State<QuizScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A26),
+                      color: colors.surface,
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.white10),
+                      border: Border.all(color: colors.border),
                     ),
                     child: Text(
                       currentQuestion['question'] ?? 'No question text',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: scheme.onSurface,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                         height: 1.4,
@@ -271,7 +285,7 @@ class _QuizScreenState extends State<QuizScreen> {
                       ),
                       child: Text(
                         currentQuestion['hint'],
-                        style: const TextStyle(color: Colors.white70, height: 1.5),
+                        style: TextStyle(color: colors.mutedText, height: 1.5),
                       ),
                     ),
                   Expanded(
@@ -290,17 +304,20 @@ class _QuizScreenState extends State<QuizScreen> {
                               duration: const Duration(milliseconds: 250),
                               padding: const EdgeInsets.all(18),
                               decoration: BoxDecoration(
-                                color: _getButtonColor(option),
+                                color: _getButtonColor(option, colors.surfaceAlt),
                                 borderRadius: BorderRadius.circular(18),
-                                border: Border.all(color: _getBorderColor(option), width: 2),
+                                border: Border.all(
+                                  color: _getBorderColor(option, colors.border),
+                                  width: 2,
+                                ),
                               ),
                               child: Row(
                                 children: [
                                   Expanded(
                                     child: Text(
                                       option,
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                      style: TextStyle(
+                                        color: scheme.onSurface,
                                         fontSize: 16,
                                         fontWeight: FontWeight.w500,
                                         height: 1.4,
@@ -324,21 +341,24 @@ class _QuizScreenState extends State<QuizScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.04),
+                        color: colors.surface,
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: Colors.white10),
+                        border: Border.all(color: colors.border),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Why this is correct',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: scheme.onSurface,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             explanation,
-                            style: const TextStyle(color: Colors.white70, height: 1.5),
+                            style: TextStyle(color: colors.mutedText, height: 1.5),
                           ),
                         ],
                       ),
