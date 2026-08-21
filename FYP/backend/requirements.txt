@@ -5,3 +5,9 @@ pypdf
 python-pptx
 youtube-transcript-api
 pymongo
+apscheduler
+google-api-python-client
+google-auth-oauthlib
+pytz
+python-dotenv
+ics

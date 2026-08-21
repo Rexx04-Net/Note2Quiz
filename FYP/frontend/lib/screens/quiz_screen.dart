@@ -1,11 +1,26 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import '../config.dart';
 import '../theme/app_theme.dart';
+import 'quiz_review_screen.dart';
 
 class QuizScreen extends StatefulWidget {
   final List<dynamic> quizData;
+  final String? notebookId;
+  final int? weekNumber;
+  final String? userEmail;
+  final bool isWeaknessDrill;
 
-  const QuizScreen({super.key, required this.quizData});
+  const QuizScreen({
+    super.key,
+    required this.quizData,
+    this.notebookId,
+    this.weekNumber,
+    this.userEmail,
+    this.isWeaknessDrill = false,
+  });
 
   @override
   State<QuizScreen> createState() => _QuizScreenState();
@@ -18,6 +33,17 @@ class _QuizScreenState extends State<QuizScreen> {
   String _selectedAnswer = '';
   bool _isAnswered = false;
   bool _showHint = false;
+  final List<Map<String, dynamic>> _userAnswers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    for (var q in widget.quizData) {
+      if (q is Map && q['options'] is List) {
+        (q['options'] as List).shuffle();
+      }
+    }
+  }
 
   void _submitAnswer(String answer) {
     if (_isAnswered) return;
@@ -34,6 +60,17 @@ class _QuizScreenState extends State<QuizScreen> {
         _score += 10;
         _correctAnswers++;
       }
+
+      _userAnswers.add({
+        'question': currentQuestion['question'] ?? '',
+        'options': List<String>.from(currentQuestion['options'] ?? []),
+        'selected_answer': answer,
+        'correct_answer': (currentQuestion['answer'] ?? '').toString(),
+        'is_correct': isCorrect,
+        'hint': (currentQuestion['hint'] ?? '').toString(),
+        'explanation': (currentQuestion['explanation'] ?? '').toString(),
+        'is_remediation': currentQuestion['is_remediation'] == true,
+      });
     });
 
     Timer(const Duration(milliseconds: 1800), () {
@@ -58,12 +95,53 @@ class _QuizScreenState extends State<QuizScreen> {
       _selectedAnswer = '';
       _isAnswered = false;
       _showHint = false;
+      _userAnswers.clear();
     });
+  }
+
+  Future<void> _saveQuizResult(int percent, int total) async {
+    if (widget.notebookId == null) return;
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/save-quiz-result'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'notebook_id': widget.notebookId,
+          'score': _score,
+          'correct_answers': _correctAnswers,
+          'total_questions': total,
+          'percentage': percent,
+          'quiz_data': widget.quizData,
+          'breakdown': _userAnswers,
+          'quiz_title': widget.isWeaknessDrill ? '🎯 Weakness Drill' : 'Solo Practice',
+        }),
+      );
+
+      // Also record in syllabus automation history if launched as revision quiz
+      if (widget.weekNumber != null) {
+        await http.post(
+          Uri.parse('$baseUrl/api/automations/quiz-completed'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'notebook_id': widget.notebookId,
+            'week_number': widget.weekNumber,
+            'score': _correctAnswers,
+            'total_questions': total,
+            'user_email': widget.userEmail ?? '',
+          }),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error saving quiz result: $e');
+    }
   }
 
   void _showResultsDialog() {
     final total = widget.quizData.length;
     final percent = total == 0 ? 0 : ((_correctAnswers / total) * 100).round();
+    final scheme = Theme.of(context).colorScheme;
+
+    _saveQuizResult(percent, total);
 
     showDialog(
       context: context,
@@ -72,7 +150,7 @@ class _QuizScreenState extends State<QuizScreen> {
         backgroundColor: context.appColors.surfaceAlt,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Text(
-          'Practice complete',
+          widget.isWeaknessDrill ? '🎯 Weakness Drill Complete' : 'Practice complete',
           style: TextStyle(
             color: Theme.of(context).colorScheme.onSurface,
             fontWeight: FontWeight.bold,
@@ -108,13 +186,26 @@ class _QuizScreenState extends State<QuizScreen> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: context.appColors.border),
               ),
-              child: Text(
-                percent >= 80
-                    ? 'Strong work. You have a good grasp of this topic.'
-                    : percent >= 50
-                        ? 'Decent progress. Review the weak areas and try again.'
-                        : 'You should revisit the source material and retry this quiz.',
-                style: TextStyle(color: context.appColors.mutedText, height: 1.5),
+              child: Row(
+                children: [
+                  Icon(
+                    percent >= 80 ? Icons.emoji_events_outlined : Icons.track_changes_outlined,
+                    color: percent >= 80 ? Colors.amber : scheme.primary,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      widget.isWeaknessDrill
+                          ? (percent >= 80
+                              ? 'Excellent remediation! You mastered your previously missed concepts.'
+                              : 'Keep practicing! Review explanations to solidify weak areas.')
+                          : (percent >= 80
+                              ? 'Strong understanding shown. Try harder questions or take this live.'
+                              : 'Review weak spots and try another practice round.'),
+                      style: TextStyle(color: context.appColors.mutedText, fontSize: 13, height: 1.4),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -125,17 +216,35 @@ class _QuizScreenState extends State<QuizScreen> {
               Navigator.pop(context);
               _restartQuiz();
             },
-            child: const Text('Try again'),
+            child: const Text('Practice again'),
           ),
+          if (_userAnswers.isNotEmpty)
+            OutlinedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => QuizReviewScreen(
+                      quizData: widget.quizData,
+                      breakdown: _userAnswers,
+                      score: _score,
+                      correctAnswers: _correctAnswers,
+                      totalQuestions: total,
+                      percentage: percent,
+                      notebookId: widget.notebookId,
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Review Answers'),
+            ),
           FilledButton(
             onPressed: () {
               Navigator.pop(context);
               Navigator.pop(context);
             },
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-            ),
-            child: const Text('Finish'),
+            child: const Text('Finish session'),
           ),
         ],
       ),
@@ -190,7 +299,19 @@ class _QuizScreenState extends State<QuizScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         centerTitle: true,
-        title: Text('Solo Practice', style: TextStyle(color: colors.mutedText, fontSize: 16)),
+        title: widget.isWeaknessDrill
+            ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.psychology_alt_rounded, color: Colors.orangeAccent, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Weakness Remediation Drill',
+                    style: TextStyle(color: Colors.orangeAccent, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              )
+            : Text('Solo Practice', style: TextStyle(color: colors.mutedText, fontSize: 16)),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 20),
@@ -252,16 +373,52 @@ class _QuizScreenState extends State<QuizScreen> {
                     decoration: BoxDecoration(
                       color: colors.surface,
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: colors.border),
-                    ),
-                    child: Text(
-                      currentQuestion['question'] ?? 'No question text',
-                      style: TextStyle(
-                        color: scheme.onSurface,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        height: 1.4,
+                      border: Border.all(
+                        color: currentQuestion['is_remediation'] == true
+                            ? Colors.orangeAccent.withValues(alpha: 0.6)
+                            : colors.border,
+                        width: currentQuestion['is_remediation'] == true ? 1.5 : 1.0,
                       ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (currentQuestion['is_remediation'] == true) ...[
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.4)),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.psychology_alt_rounded, color: Colors.orangeAccent, size: 14),
+                                SizedBox(width: 6),
+                                Text(
+                                  '🎯 Weakness Reinforcement Point',
+                                  style: TextStyle(
+                                    color: Colors.orangeAccent,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        Text(
+                          currentQuestion['question'] ?? 'No question text',
+                          style: TextStyle(
+                            color: scheme.onSurface,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 20),

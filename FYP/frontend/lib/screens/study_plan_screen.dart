@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config.dart';
 import '../theme/app_theme.dart';
+import '../widgets/interactive_note_viewer.dart';
 import 'quiz_screen.dart';
 
 class StudyPlanScreen extends StatefulWidget {
@@ -196,15 +197,9 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
               ),
               const Divider(height: 24),
               Expanded(
-                child: SingleChildScrollView(
-                  child: Text(
-                    noteText,
-                    style: TextStyle(
-                      fontSize: 15,
-                      height: 1.6,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.9),
-                    ),
-                  ),
+                child: InteractiveNoteViewer(
+                  content: noteText,
+                  title: task['title'] ?? 'AI Note',
                 ),
               ),
               const SizedBox(height: 16),
@@ -213,6 +208,7 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isCompleted ? Colors.green : Theme.of(context).colorScheme.primary,
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
@@ -235,6 +231,8 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
       },
     );
   }
+
+
 
   void _showFlashcardsModal(Map<String, dynamic> task, List<dynamic> flashcards, String? taskId, bool isCompleted) {
     if (flashcards.isEmpty) {
@@ -274,8 +272,12 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
-                  height: 220,
-                  width: 300,
+                  constraints: const BoxConstraints(
+                    minHeight: 200,
+                    maxHeight: 340,
+                    minWidth: 280,
+                    maxWidth: 340,
+                  ),
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: showBack ? Colors.amber.withOpacity(0.15) : Theme.of(context).colorScheme.surface,
@@ -297,13 +299,18 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
                           color: showBack ? Colors.amber.shade800 : Colors.grey,
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        showBack ? (currentCard['back'] ?? '') : (currentCard['front'] ?? ''),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: Text(
+                            showBack ? (currentCard['back'] ?? '') : (currentCard['front'] ?? ''),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, height: 1.4),
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       Text(
                         'Tap to flip',
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
@@ -631,6 +638,8 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
     final tasks = (day['tasks'] as List<dynamic>?) ?? [];
     final title = day['title'] ?? 'Day Session';
     final estMins = day['estimated_minutes'] ?? 60;
+    final topics = (day['topics_covered'] as List<dynamic>?) ?? [];
+    final scheme = Theme.of(context).colorScheme;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -656,6 +665,25 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
             ),
           ],
         ),
+        if (topics.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: topics.map((t) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: scheme.primary.withValues(alpha: 0.25)),
+              ),
+              child: Text(
+                '📌 $t',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: scheme.primary),
+              ),
+            )).toList(),
+          ),
+        ],
         const SizedBox(height: 16),
         ...tasks.map((task) => _buildTaskCard(task)).toList(),
       ],

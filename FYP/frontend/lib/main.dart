@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'dart:async';
 import 'screens/lobby_screen.dart';
+import 'services/deep_link_service.dart';
 import 'state/app_settings_controller.dart';
 import 'theme/app_theme.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +25,9 @@ void main() async {
   final settingsController = AppSettingsController();
   await settingsController.load();
 
+  // Initialize DeepLinkService for note2quiz:// deep links
+  DeepLinkService().initialize();
+
   runApp(StudyApp(controller: settingsController));
 }
 
@@ -40,6 +45,7 @@ class StudyApp extends StatelessWidget {
           controller: controller,
           child: MaterialApp(
             title: 'Note2Quiz Pro',
+            navigatorKey: DeepLinkService().navigatorKey,
             debugShowCheckedModeBanner: false,
             theme: StudyAppTheme.lightTheme(),
             darkTheme: StudyAppTheme.darkTheme(),

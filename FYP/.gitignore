@@ -1,2 +1,12 @@
 node_modules/
 firebase-debug.log
+.env
+api_secrets.py
+__pycache__/
+*.pyc
+venv/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+backend/data_storage/

@@ -16,6 +16,7 @@ dependencies:
   # Networking & Files
   http: ^1.6.0
   file_picker: ^10.3.7
+  app_links: ^6.3.2
   
   # Fonts (Fixes the Noto Font warning)
   google_fonts: ^8.0.0
