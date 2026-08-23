@@ -5,6 +5,7 @@ import '../config.dart';
 import '../theme/app_theme.dart';
 import '../widgets/interactive_note_viewer.dart';
 import 'quiz_screen.dart';
+import 'quiz_review_screen.dart';
 
 class StudyPlanScreen extends StatefulWidget {
   final Map<String, dynamic>? initialPlan;
@@ -112,7 +113,7 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
     }
   }
 
-  void _executeTask(Map<String, dynamic> task) {
+  void _executeTask(Map<String, dynamic> task) async {
     final actionType = task['action_type'] ?? 'note';
     final payload = task['payload'] ?? {};
     final taskId = task['task_id'];
@@ -127,17 +128,26 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
         return;
       }
 
-      Navigator.push(
+      // If already completed or has prior attempt breakdown, show review/retake options sheet
+      if (isCompleted || payload['last_breakdown'] != null) {
+        _showQuizReviewOrRetakeOptions(task, quizData);
+        return;
+      }
+
+      final result = await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => QuizScreen(quizData: quizData),
+          builder: (_) => QuizScreen(
+            quizData: quizData,
+            notebookId: task['notebook_id'],
+            userEmail: widget.userEmail,
+          ),
         ),
-      ).then((_) {
-        // Mark task completed after completing quiz
-        if (!isCompleted && taskId != null) {
-          _toggleTaskStatus(taskId, false);
-        }
-      });
+      );
+
+      if (result != null && result is Map) {
+        _handleQuizResult(task, result, quizData);
+      }
     } else if (actionType == 'flashcard') {
       final flashcards = payload['flashcards'] as List<dynamic>? ?? [];
       _showFlashcardsModal(task, flashcards, taskId, isCompleted);
@@ -146,6 +156,178 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
       final noteText = payload['summary_text'] ?? 'No summary text available.';
       _showNoteModal(task, noteText, taskId, isCompleted);
     }
+  }
+
+  void _handleQuizResult(Map<String, dynamic> task, Map<dynamic, dynamic> result, List<dynamic> quizData) {
+    final taskId = task['task_id'];
+    final isCompleted = task['completed'] == true;
+    final int percentage = (result['percentage'] ?? 0) as int;
+    final int correct = (result['correct_answers'] ?? 0) as int;
+    final int total = (result['total_questions'] ?? quizData.length) as int;
+    final userAnswers = result['user_answers'];
+
+    setState(() {
+      task['payload']['last_score'] = percentage;
+      task['payload']['last_correct'] = correct;
+      task['payload']['last_total'] = total;
+      task['payload']['last_breakdown'] = userAnswers;
+    });
+
+    if (percentage >= 80) {
+      // Passed mastery threshold (>= 80%)
+      if (!isCompleted && taskId != null) {
+        _toggleTaskStatus(taskId, false);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.green.shade800,
+            duration: const Duration(seconds: 3),
+            content: Text('🎉 Mastery Achieved ($percentage% - $correct/$total)! Quiz marked as completed.'),
+          ),
+        );
+      }
+    } else {
+      // Failed (< 80%) - Do NOT mark completed
+      if (isCompleted && taskId != null) {
+        _toggleTaskStatus(taskId, true); // uncheck if previously checked
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.orange.shade900,
+            duration: const Duration(seconds: 4),
+            content: Text('⚠️ Scored $percentage% ($correct/$total). Reach 80% accuracy to pass and complete this task!'),
+            action: SnackBarAction(
+              label: 'Retake',
+              textColor: Colors.amber,
+              onPressed: () => _executeTask(task),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  void _showQuizReviewOrRetakeOptions(Map<String, dynamic> task, List<dynamic> quizData) {
+    final payload = task['payload'] ?? {};
+    final breakdown = payload['last_breakdown'] as List<dynamic>?;
+    final int lastScore = (payload['last_score'] as num?)?.toInt() ?? 100;
+    final int lastCorrect = (payload['last_correct'] as num?)?.toInt() ?? quizData.length;
+    final int lastTotal = (payload['last_total'] as num?)?.toInt() ?? quizData.length;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.appColors.surfaceAlt,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.quiz, color: Colors.purpleAccent, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          task['title'] ?? 'Checkpoint Quiz',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Latest Score: $lastScore% ($lastCorrect/$lastTotal Correct)',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: lastScore >= 80 ? Colors.greenAccent : Colors.orangeAccent,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 28),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retake Quiz'),
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        final result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => QuizScreen(
+                              quizData: quizData,
+                              notebookId: task['notebook_id'],
+                              userEmail: widget.userEmail,
+                            ),
+                          ),
+                        );
+                        if (result != null && result is Map) {
+                          _handleQuizResult(task, result, quizData);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.purple,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.fact_check),
+                      label: const Text('Review Answers'),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => QuizReviewScreen(
+                              quizData: quizData,
+                              breakdown: breakdown,
+                              score: lastScore,
+                              correctAnswers: lastCorrect,
+                              totalQuestions: lastTotal,
+                              percentage: lastScore,
+                              notebookId: task['notebook_id'],
+                              quizTitle: task['title'],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _showNoteModal(Map<String, dynamic> task, String noteText, String? taskId, bool isCompleted) {
@@ -247,43 +429,170 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
       builder: (context) {
         int cardIdx = 0;
         bool showBack = false;
+        double currentEF = double.tryParse(task['ease_factor']?.toString() ?? '2.5') ?? 2.5;
+        int currentIntervalDays = int.tryParse((task['sm2_interval'] ?? '1d').toString().replaceAll('d', '')) ?? 1;
+        int cardsMastered = 0;
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final bool isFinished = cardIdx >= flashcards.length;
+
+            if (isFinished) {
+              return AlertDialog(
+                backgroundColor: context.appColors.surfaceAlt,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                title: const Row(
+                  children: [
+                    Icon(Icons.military_tech, color: Colors.amber, size: 28),
+                    SizedBox(width: 10),
+                    Text('SM-2 Review Consolidated!'),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.purple.withValues(alpha: 0.2), Colors.blue.withValues(alpha: 0.1)],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            '🎉 All ${flashcards.length} Flashcards Completed!',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              Column(
+                                children: [
+                                  const Text('Mastered', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                  Text('$cardsMastered/${flashcards.length}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.amber)),
+                                ],
+                              ),
+                              Column(
+                                children: [
+                                  const Text('Ease Factor', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                  Text(currentEF.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.purpleAccent)),
+                                ],
+                              ),
+                              Column(
+                                children: [
+                                  const Text('Next Recall', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                  Text('+${currentIntervalDays}d', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.greenAccent)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Your active recall performance has been recorded. Ebbinghaus memory curve reset for this topic.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
+                  ],
+                ),
+                actions: [
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.amber.shade700,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      if (taskId != null) {
+                        _toggleTaskStatus(taskId, isCompleted);
+                      }
+                    },
+                    child: const Text('Complete & Consolidate Task', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              );
+            }
+
+            void processSM2Rating(int q, String nextIntervalLabel, int nextDays) {
+              // SM-2 Formula: EF' = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
+              double newEF = currentEF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
+              if (newEF < 1.3) newEF = 1.3;
+
+              setDialogState(() {
+                currentEF = newEF;
+                currentIntervalDays = nextDays;
+                if (q >= 3) cardsMastered++;
+                cardIdx++;
+                showBack = false;
+              });
+            }
+
             final currentCard = flashcards[cardIdx];
+
             return AlertDialog(
               backgroundColor: context.appColors.surfaceAlt,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              title: Row(
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.bolt, color: Colors.amber),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Flashcards (${cardIdx + 1}/${flashcards.length})',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                  Row(
+                    children: [
+                      const Icon(Icons.psychology, color: Colors.purpleAccent, size: 24),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'SM-2 Active Recall (${cardIdx + 1}/${flashcards.length})',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          'EF: ${currentEF.toStringAsFixed(2)}',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purpleAccent),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: (cardIdx + 1) / flashcards.length,
+                      minHeight: 4,
+                      backgroundColor: Colors.grey.withValues(alpha: 0.2),
+                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.purpleAccent),
                     ),
                   ),
                 ],
               ),
               content: GestureDetector(
-                onTap: () {
-                  setDialogState(() => showBack = !showBack);
-                },
+                onTap: () => setDialogState(() => showBack = !showBack),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
+                  duration: const Duration(milliseconds: 250),
                   constraints: const BoxConstraints(
-                    minHeight: 200,
-                    maxHeight: 340,
-                    minWidth: 280,
-                    maxWidth: 340,
+                    minHeight: 210,
+                    maxHeight: 320,
+                    minWidth: 300,
+                    maxWidth: 380,
                   ),
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: showBack ? Colors.amber.withOpacity(0.15) : Theme.of(context).colorScheme.surface,
+                    color: showBack ? Colors.purple.withValues(alpha: 0.12) : Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: showBack ? Colors.amber : Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                      color: showBack ? Colors.purpleAccent : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
                       width: 2,
                     ),
                   ),
@@ -291,12 +600,12 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        showBack ? 'DEFINITION' : 'TERM',
+                        showBack ? '💡 ANSWER / DEFINITION' : '❓ TERM / CONCEPT',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
-                          color: showBack ? Colors.amber.shade800 : Colors.grey,
+                          letterSpacing: 1.5,
+                          color: showBack ? Colors.purpleAccent : Colors.grey,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -306,60 +615,131 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
                           child: Text(
                             showBack ? (currentCard['back'] ?? '') : (currentCard['front'] ?? ''),
                             textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, height: 1.4),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, height: 1.4),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       Text(
-                        'Tap to flip',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                        showBack ? 'Tap card to flip back' : '👆 Tap to reveal definition & rate recall',
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                       ),
                     ],
                   ),
                 ),
               ),
+              actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               actions: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: cardIdx > 0
-                          ? () {
-                              setDialogState(() {
-                                cardIdx--;
-                                showBack = false;
-                              });
-                            }
-                          : null,
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.amber.shade700,
-                        foregroundColor: Colors.white,
+                if (!showBack)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Exit'),
                       ),
-                      onPressed: () {
-                        Navigator.pop(context);
-                        if (taskId != null) {
-                          _toggleTaskStatus(taskId, isCompleted);
-                        }
-                      },
-                      child: const Text('Finish Review'),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.arrow_forward),
-                      onPressed: cardIdx < flashcards.length - 1
-                          ? () {
-                              setDialogState(() {
-                                cardIdx++;
-                                showBack = false;
-                              });
-                            }
-                          : null,
-                    ),
-                  ],
-                )
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.purpleAccent.shade700,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.touch_app, size: 16),
+                        label: const Text('Show Answer'),
+                        onPressed: () => setDialogState(() => showBack = true),
+                      ),
+                    ],
+                  )
+                else
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Center(
+                        child: Text(
+                          'Rate your recall (SM-2 Spaced Repetition):',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.redAccent,
+                                side: const BorderSide(color: Colors.redAccent),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: () => processSM2Rating(1, '<10m', 1),
+                              child: const Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('Again', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  Text('<10m', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.orangeAccent,
+                                side: const BorderSide(color: Colors.orangeAccent),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: () => processSM2Rating(3, '1d', 1),
+                              child: const Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('Hard', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  Text('1d', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.greenAccent,
+                                side: const BorderSide(color: Colors.greenAccent),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: () => processSM2Rating(4, '3d', 3),
+                              child: const Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('Good', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  Text('3d', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Colors.blueAccent,
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: () => processSM2Rating(5, '6d', 6),
+                              child: const Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('Easy', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
+                                  Text('6d', style: TextStyle(fontSize: 10, color: Colors.white70)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
               ],
             );
           },
@@ -639,6 +1019,7 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
     final title = day['title'] ?? 'Day Session';
     final estMins = day['estimated_minutes'] ?? 60;
     final topics = (day['topics_covered'] as List<dynamic>?) ?? [];
+    final focusObj = day['focus_objective']?.toString();
     final scheme = Theme.of(context).colorScheme;
 
     return ListView(
@@ -665,6 +1046,31 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
             ),
           ],
         ),
+        if (focusObj != null && focusObj.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.purple.withValues(alpha: 0.15), Colors.indigo.withValues(alpha: 0.08)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.psychology, size: 18, color: Colors.purpleAccent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'SM-2 Learning Goal: $focusObj',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.purpleAccent),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         if (topics.isNotEmpty) ...[
           const SizedBox(height: 8),
           Wrap(
@@ -696,15 +1102,27 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
     final title = task['title'] ?? 'Task';
     final subject = task['notebook_title'] ?? 'Subject';
     final taskId = task['task_id'];
+    final isSm2Review = task['is_sm2_review'] == true;
+    final sm2Interval = task['sm2_interval'] ?? '1d';
+    final difficulty = task['difficulty_tier'] ?? 'Intermediate';
+    final cognitive = task['cognitive_load'] ?? 'Moderate';
+    final payload = task['payload'] ?? {};
+    final lastScore = payload['last_score'];
 
     IconData actionIcon;
     Color actionColor;
     String actionBtnLabel;
 
     if (actionType == 'quiz') {
-      actionIcon = Icons.quiz;
-      actionColor = Colors.purple;
-      actionBtnLabel = 'Take Quiz';
+      actionIcon = isCompleted ? Icons.fact_check : Icons.quiz;
+      actionColor = isCompleted ? Colors.purple : (lastScore != null ? Colors.orange.shade800 : Colors.purple);
+      if (isCompleted) {
+        actionBtnLabel = 'Review Answers';
+      } else if (lastScore != null) {
+        actionBtnLabel = 'Retake ($lastScore%)';
+      } else {
+        actionBtnLabel = 'Take Quiz';
+      }
     } else if (actionType == 'flashcard') {
       actionIcon = Icons.style;
       actionColor = Colors.amber.shade800;
@@ -717,18 +1135,26 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
 
     final scheme = Theme.of(context).colorScheme;
 
+    // Difficulty chip colors
+    Color diffColor = Colors.amber;
+    if (difficulty.toString().toLowerCase().contains('foundat')) {
+      diffColor = Colors.teal;
+    } else if (difficulty.toString().toLowerCase().contains('high') || difficulty.toString().toLowerCase().contains('exam')) {
+      diffColor = Colors.redAccent;
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isCompleted
-            ? scheme.surface.withOpacity(0.5)
-            : scheme.surface,
+            ? scheme.surface.withValues(alpha: 0.5)
+            : (isSm2Review ? Colors.purple.withValues(alpha: 0.04) : scheme.surface),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isCompleted
-              ? Colors.green.withOpacity(0.4)
-              : scheme.outline.withOpacity(0.2),
-          width: isCompleted ? 1.5 : 1,
+              ? Colors.green.withValues(alpha: 0.4)
+              : (isSm2Review ? Colors.purpleAccent.withValues(alpha: 0.5) : scheme.outline.withValues(alpha: 0.2)),
+          width: isCompleted || isSm2Review ? 1.5 : 1,
         ),
       ),
       child: ListTile(
@@ -740,7 +1166,7 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
           child: Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: isCompleted ? Colors.green : actionColor.withOpacity(0.15),
+              color: isCompleted ? Colors.green : actionColor.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -759,14 +1185,16 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
           ),
         ),
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Row(
+          padding: const EdgeInsets.only(top: 6),
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 4,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: actionColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: actionColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   subject,
@@ -774,6 +1202,53 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: actionColor,
+                  ),
+                ),
+              ),
+              if (isSm2Review)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    '🧠 SM-2 Recall ($sm2Interval)',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.purpleAccent,
+                    ),
+                  ),
+                ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: diffColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  difficulty,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: diffColor,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '⚡ $cognitive',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),

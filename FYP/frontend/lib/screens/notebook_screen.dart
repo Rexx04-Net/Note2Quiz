@@ -669,6 +669,29 @@ class _NotebookScreenState extends State<NotebookScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (_selectedSourceIds.isNotEmpty && _sources.isNotEmpty) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.check_circle_outline, size: 16, color: Colors.purpleAccent),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Targeting ${_selectedSourceIds.length} of ${_sources.length} selected topics',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.purpleAccent),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const Text('1. Select Plan Duration:', style: TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   Wrap(
@@ -734,6 +757,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
         body: jsonEncode({
           'email': widget.notebook['user_email'] ?? 'guest',
           'notebook_ids': [widget.notebook['id']],
+          'source_ids': _selectedSourceIds.toList(),
           'duration_option': durationOption,
           'daily_hours': dailyHours,
         }),

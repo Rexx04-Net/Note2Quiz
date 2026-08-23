@@ -630,6 +630,7 @@ class _AutomationHistoryScreenState extends State<AutomationHistoryScreen> {
     final emailSentAt = item['email_dispatched_at'] ?? item['notification_sent_at'];
     final eveSentAt = item['evening_dispatched_at'];
     final quizRecord = item['quiz_record'];
+    final mastery = item['mastery'] as Map<String, dynamic>?;
 
     Color statusColor = Colors.amber;
     IconData statusIcon = Icons.access_time;
@@ -827,6 +828,61 @@ class _AutomationHistoryScreenState extends State<AutomationHistoryScreen> {
                         ],
                       ),
                     ),
+                    if (mastery != null && (mastery['mastery_score'] ?? 0) > 0) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: colors.surfaceAlt,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: colors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.psychology_rounded, size: 14, color: Colors.purpleAccent),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'SM-2 Retention: ${mastery['mastery_score']}%',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: (mastery['mastery_score'] ?? 0) >= 80
+                                            ? Colors.greenAccent
+                                            : ((mastery['mastery_score'] ?? 0) >= 50 ? Colors.amberAccent : Colors.redAccent),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  '${mastery['status_label'] ?? ''} (${mastery['decay_days'] ?? 0}d ago)',
+                                  style: TextStyle(fontSize: 11, color: colors.subtleText),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(99),
+                              child: LinearProgressIndicator(
+                                value: ((mastery['mastery_score'] ?? 0) / 100.0).clamp(0.0, 1.0),
+                                minHeight: 5,
+                                backgroundColor: colors.border,
+                                valueColor: AlwaysStoppedAnimation(
+                                  (mastery['mastery_score'] ?? 0) >= 80
+                                      ? Colors.greenAccent
+                                      : ((mastery['mastery_score'] ?? 0) >= 50 ? Colors.amberAccent : Colors.redAccent),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 10),
                   // Action button

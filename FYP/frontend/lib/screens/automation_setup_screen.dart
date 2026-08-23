@@ -45,6 +45,7 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
 
   bool _enableEveningReminder = true;
   TimeOfDay _eveningReminderTime = const TimeOfDay(hour: 21, minute: 0);
+  TimeOfDay? _customPrimaryReminderTime;
 
   PlatformFile? _selectedPdf;
   bool _isLoading = false;
@@ -222,6 +223,33 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
     }
   }
 
+  Future<void> _selectPrimaryReminderTime() async {
+    final initial = _customPrimaryReminderTime ?? _endTime;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+    );
+    if (picked != null) {
+      setState(() {
+        _customPrimaryReminderTime = picked;
+      });
+    }
+  }
+
+  void _setDemoNowTime() {
+    final now = DateTime.now().add(const Duration(minutes: 2));
+    setState(() {
+      _customPrimaryReminderTime = TimeOfDay(hour: now.hour, minute: now.minute);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("⚡ Presentation Demo Mode: 1st Alert set to ${_formatTimeOfDay(_customPrimaryReminderTime!)} (in 2 mins)"),
+        backgroundColor: Colors.purpleAccent,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   Future<void> _selectEveningReminderTime() async {
     final picked = await showTimePicker(
       context: context,
@@ -280,6 +308,8 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
       final uri = Uri.parse('$baseUrl/api/automations');
       final request = http.MultipartRequest('POST', uri);
 
+      final effectivePrimaryTime = _customPrimaryReminderTime ?? _endTime;
+
       request.fields['notebook_id'] = widget.notebookId;
       request.fields['course_name'] = _courseNameController.text.trim();
       request.fields['user_email'] = _emailController.text.trim();
@@ -292,7 +322,7 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
       request.fields['semester_start_date'] = _formatDate(_semesterStartDate);
       request.fields['total_weeks'] = _totalWeeks.toString();
       request.fields['has_break_week'] = _hasBreakWeek ? 'true' : 'false';
-      request.fields['primary_reminder_time'] = _formatTimeOfDay(_endTime);
+      request.fields['primary_reminder_time'] = _formatTimeOfDay(effectivePrimaryTime);
       request.fields['enable_evening_reminder'] = _enableEveningReminder ? 'true' : 'false';
       request.fields['evening_reminder_time'] = _formatTimeOfDay(_eveningReminderTime);
 
@@ -674,50 +704,100 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
                   const SizedBox(height: 24),
 
                   // 3. Spaced Revision Reminder Times
-                  Text(
-                    "3. Spaced Revision Reminders",
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "3. Spaced Revision Reminders",
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      if (_customPrimaryReminderTime != null)
+                        TextButton.icon(
+                          onPressed: () => setState(() => _customPrimaryReminderTime = null),
+                          icon: const Icon(Icons.restore, size: 14),
+                          label: const Text("Reset to Auto", style: TextStyle(fontSize: 12)),
+                        ),
+                    ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
-                    "1st alert is sent immediately when class ends. 2nd alert is sent at 9:00 PM if the quiz is pending.",
+                    "Default: 1st alert is auto-scheduled at class end (${_formatTimeOfDay(_endTime)}). Tap to customize for live presentation demo.",
                     style: TextStyle(fontSize: 12, color: colors.mutedText),
                   ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
+                      // 1st Alert (Clickable Time Picker, Default = Auto class end)
                       Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: colors.border),
-                            borderRadius: BorderRadius.circular(10),
+                        child: OutlinedButton.icon(
+                          onPressed: _selectPrimaryReminderTime,
+                          icon: Icon(
+                            Icons.alarm_on_rounded,
+                            color: _customPrimaryReminderTime != null ? Colors.cyanAccent : Colors.orangeAccent,
+                            size: 18,
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.alarm_on, color: Colors.orangeAccent, size: 18),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  "1st Alert: At Class End (${_formatTimeOfDay(_endTime)})",
-                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ],
+                          label: Text(
+                            _customPrimaryReminderTime != null
+                                ? "1st (Custom): ${_formatTimeOfDay(_customPrimaryReminderTime!)}"
+                                : "1st (Auto): ${_formatTimeOfDay(_endTime)}",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: _customPrimaryReminderTime != null ? Colors.cyanAccent : scheme.onSurface,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+                            side: BorderSide(
+                              color: _customPrimaryReminderTime != null ? Colors.cyanAccent : colors.border,
+                            ),
                           ),
                         ),
                       ),
                       if (_enableEveningReminder) ...[
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 10),
+                        // 2nd Alert (Clickable Time Picker, Default = 21:00)
                         Expanded(
                           child: OutlinedButton.icon(
                             onPressed: _selectEveningReminderTime,
                             icon: const Icon(Icons.nightlight_round, color: Color(0xFFA78BFA), size: 18),
-                            label: Text("2nd: ${_formatTimeOfDay(_eveningReminderTime)}"),
-                            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                            label: Text(
+                              "2nd: ${_formatTimeOfDay(_eveningReminderTime)}",
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10)),
                           ),
                         ),
                       ],
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Quick Demo Mode Shortcut Row
+                  Row(
+                    children: [
+                      InkWell(
+                        onTap: _setDemoNowTime,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.purpleAccent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.4)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.bolt, color: Colors.purpleAccent, size: 14),
+                              SizedBox(width: 4),
+                              Text("⚡ Demo: Now + 2 Mins", style: TextStyle(color: Colors.purpleAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text("Sets 1st alert in 2 mins for live demo", style: TextStyle(color: colors.mutedText, fontSize: 11)),
                     ],
                   ),
                   const SizedBox(height: 6),

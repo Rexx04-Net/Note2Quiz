@@ -8,6 +8,7 @@ import 'settings_screen.dart';
 import 'student_lobby_screen.dart';
 import 'study_plan_screen.dart';
 import 'timetable_scanner_screen.dart';
+import 'analytics_screen.dart';
 import '../state/app_settings_controller.dart';
 import '../theme/app_theme.dart';
 import '../utils/course_colors.dart';
@@ -829,6 +830,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
                                       children: [
+                                        IconButton(
+                                          tooltip: 'Delete Automation Schedule',
+                                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                          onPressed: () async {
+                                            final confirm = await showDialog<bool>(
+                                              context: context,
+                                              builder: (ctx) => AlertDialog(
+                                                title: const Row(
+                                                  children: [
+                                                    Icon(Icons.delete_forever, color: Colors.redAccent),
+                                                    SizedBox(width: 8),
+                                                    Text('Delete Automation?'),
+                                                  ],
+                                                ),
+                                                content: Text('Are you sure you want to delete the scheduled revision automation for "$cName"?'),
+                                                actions: [
+                                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                                  FilledButton(
+                                                    style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+                                                    onPressed: () => Navigator.pop(ctx, true),
+                                                    child: const Text('Delete'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                            if (confirm == true) {
+                                              try {
+                                                await http.delete(
+                                                  Uri.parse('$baseUrl/api/automations/$notebookId?course_name=${Uri.encodeComponent(cName)}&user_email=${Uri.encodeComponent(_userEmail)}'),
+                                                );
+                                                if (context.mounted) {
+                                                  Navigator.pop(context);
+                                                  _fetchNotebooks();
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(content: Text('Automation for "$cName" deleted.'), backgroundColor: Colors.green),
+                                                  );
+                                                }
+                                              } catch (_) {}
+                                            }
+                                          },
+                                        ),
+                                        const SizedBox(width: 4),
                                         if (matchedNb != null) ...[
                                           TextButton.icon(
                                             icon: const Icon(Icons.folder_open, size: 16),
@@ -1131,6 +1174,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         'Automations & Progress (${_automations.length})',
                                         style: const TextStyle(fontWeight: FontWeight.bold),
                                       ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton.icon(
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => AnalyticsScreen(userEmail: _userEmail),
+                                          ),
+                                        );
+                                      },
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                        side: const BorderSide(color: Colors.cyanAccent),
+                                      ),
+                                      icon: const Icon(Icons.insights_rounded, color: Colors.cyanAccent, size: 18),
+                                      label: const Text('Analytics & Radar', style: TextStyle(fontWeight: FontWeight.bold)),
                                     ),
                                     const SizedBox(width: 8),
                                     OutlinedButton.icon(

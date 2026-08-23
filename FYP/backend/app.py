@@ -112,27 +112,56 @@ except:
 # Active Games Memory
 active_games = {}
 
-# --- AI CONFIGURATION ---
+# --- HIERARCHICAL TASK-AWARE AI MODEL ROUTER (GEMINI 3.X & 2.X FAMILY) ---
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-MODEL_PRIORITY = [
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-flash-latest',
-    'gemini-flash-lite-latest',
-    'gemini-2.5-pro',
-]
+TASK_MODEL_PROFILES = {
+    # 1. Complex Structure & Deep Reasoning (Active AI Roadmaps, Timetable OCR & Parsing, Comprehensive Study Guides)
+    "complex_structure": [
+        "gemini-2.5-pro",          # Top Pro-tier reasoning & schema compliance on free tier
+        "gemini-3.7-flash",        # Latest stable flagship with deep reasoning
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-2.5-flash",
+        "gemini-3-flash-preview",
+    ],
+    # 2. Ultra-Fast Lightweight & Interactive (Flashcards, Mind Maps, Executive Briefings, Chat Stream, Instant Hints)
+    "fast_interactive": [
+        "gemini-3.5-flash-lite",   # Ultra-fast sub-second generation
+        "gemini-3.1-flash-lite",   # Lightweight instant response
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemma-4",                 # High-speed open model
+        "gemini-2.5-flash",
+    ],
+    # 3. Balanced Standard (Quizzes, Diagnostic Checks, Adaptive Remediation Drills)
+    "standard": [
+        "gemini-3.7-flash",        # Fastest standard generation
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+    ]
+}
 
-def generate_with_fallback(prompt):
+def generate_with_fallback(prompt, task_type="standard"):
+    """
+    Dynamically routes prompt to optimal model queue based on task complexity (complex_structure, fast_interactive, standard).
+    Provides automatic failover with exponential backoff if 429 quota is encountered.
+    """
+    models = TASK_MODEL_PROFILES.get(task_type, TASK_MODEL_PROFILES["standard"])
     last_error = None
     rate_limited = False
-    for model_name in MODEL_PRIORITY:
+
+    for model_name in models:
         try:
-            print(f"🤖 Trying AI Model: {model_name}...")
+            print(f"🤖 [Task: {task_type}] Trying AI Model: {model_name}...")
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
-            print(f"✅ Success with {model_name}")
+            print(f"✅ Success with {model_name} ({task_type})")
             return response.text
         except Exception as e:
             err_str = str(e)
@@ -142,35 +171,37 @@ def generate_with_fallback(prompt):
                 rate_limited = True
             if "API_KEY_INVALID" in err_str or "API_KEY" in err_str:
                 break
-            time.sleep(1)
-    
+            time.sleep(0.5)
+
     if rate_limited:
         return "AI Error: Gemini Free Tier quota exceeded (Rate Limit 429). Please wait ~30-60 seconds before trying again, or add a fresh GEMINI_API_KEY in api_secrets.py."
     return f"AI Error: All models failed. Last error: {str(last_error)}"
 
-def stream_with_fallback(prompt):
-    """Generator that yields streaming text chunks from Gemini API in real-time."""
+def stream_with_fallback(prompt, task_type="fast_interactive"):
+    """Generator that yields streaming text chunks from Gemini API in real-time with task-specific routing."""
+    models = TASK_MODEL_PROFILES.get(task_type, TASK_MODEL_PROFILES["fast_interactive"])
     last_error = None
     rate_limited = False
-    for model_name in MODEL_PRIORITY:
+
+    for model_name in models:
         try:
-            print(f"🤖 [Stream] Trying AI Model: {model_name}...")
+            print(f"🤖 [Stream: {task_type}] Trying AI Model: {model_name}...")
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt, stream=True)
             for chunk in response:
                 if chunk and chunk.text:
                     yield chunk.text
-            print(f"✅ [Stream] Completed successfully with {model_name}")
+            print(f"✅ [Stream: {task_type}] Completed successfully with {model_name}")
             return
         except Exception as e:
             err_str = str(e)
-            print(f"⚠️ [Stream] Failed with {model_name}: {err_str}")
+            print(f"⚠️ [Stream: {task_type}] Failed with {model_name}: {err_str}")
             last_error = e
             if "429" in err_str or "ResourceExhausted" in err_str or "quota" in err_str.lower():
                 rate_limited = True
             if "API_KEY_INVALID" in err_str or "API_KEY" in err_str:
                 break
-            time.sleep(1)
+            time.sleep(0.5)
 
     if rate_limited:
         yield "\n\n⚠️ *AI Quota Exceeded (Rate Limit 429). Please wait 30-60 seconds before generating again.*"
@@ -446,9 +477,9 @@ def clean_ai_response(text):
     if cleaned.endswith("```"):
         cleaned = cleaned[:-3].strip()
 
-    # 2. Try direct parse
+    # 2. Try direct parse (strict=False allows unescaped control chars / newlines in strings)
     try:
-        return json.loads(cleaned)
+        return json.loads(cleaned, strict=False)
     except Exception:
         pass
 
@@ -456,7 +487,7 @@ def clean_ai_response(text):
     match = re.search(r'(\[[\s\S]*\]|\{[\s\S]*\})', cleaned)
     if match:
         try:
-            return json.loads(match.group(0))
+            return json.loads(match.group(0), strict=False)
         except Exception:
             pass
 
@@ -469,14 +500,52 @@ def clean_ai_response(text):
         if last_obj_end != -1:
             candidate = sub[:last_obj_end + 1] + "]"
             try:
-                parsed = json.loads(candidate)
+                parsed = json.loads(candidate, strict=False)
                 if isinstance(parsed, list) and len(parsed) > 0:
                     print(f"🔧 [clean_ai_response] Successfully rescued truncated JSON array with {len(parsed)} questions.")
                     return parsed
             except Exception:
                 pass
 
-    # 5. Fallback for single-quoted Python dict/list literals
+    # 4b. Resilient repair for truncated JSON objects: { ... "days": [ ... ] ... (cut off)
+    if "{" in cleaned:
+        start_idx = cleaned.find("{")
+        sub = cleaned[start_idx:]
+        last_brace = sub.rfind("}")
+        if last_brace != -1:
+            candidate = sub[:last_brace + 1]
+            try:
+                parsed = json.loads(candidate, strict=False)
+                if isinstance(parsed, dict) and len(parsed) > 0:
+                    return parsed
+            except Exception:
+                for suffix in ["}", "]}", "]}}", "]}}}"]:
+                    try:
+                        p = json.loads(candidate + suffix, strict=False)
+                        if isinstance(p, dict):
+                            print(f"🔧 [clean_ai_response] Repaired truncated JSON object with suffix '{suffix}'")
+                            return p
+                    except Exception:
+                        pass
+
+    # 5. Extract individual JSON objects via regex if outer array syntax broke
+    try:
+        obj_matches = re.findall(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', cleaned)
+        parsed_objects = []
+        for om in obj_matches:
+            try:
+                obj = json.loads(om, strict=False)
+                if isinstance(obj, dict):
+                    parsed_objects.append(obj)
+            except Exception:
+                pass
+        if parsed_objects:
+            print(f"🔧 [clean_ai_response] Extracted {len(parsed_objects)} JSON objects via regex.")
+            return parsed_objects
+    except Exception:
+        pass
+
+    # 6. Fallback for single-quoted Python dict/list literals
     try:
         import ast
         eval_data = ast.literal_eval(cleaned)
@@ -1003,12 +1072,16 @@ Context: {context}"""
         Context: {context}"""
 
     elif tool_type == "report":
-        prompt = f"""Write an executive briefing document in {output_language}.
-        Structure with clear section headings containing relevant emojis (e.g. 🎯 Purpose, 📊 Executive Summary, 📌 Key Findings, 💡 Recommendations), metadata fields (**Date:** Value, **To:** Value, **Subject:** Value), and concise bullet points (- Point).
+        today_str = datetime.datetime.now().strftime("%B %d, %Y")
+        prompt = f"""Write a comprehensive study briefing document in {output_language}.
+        Start with the header line: **Generated Date:** {today_str}
+        Do NOT include 'To:' or 'Subject:' metadata lines.
+        Structure with clear section headings containing relevant emojis (e.g. 🎯 Core Objectives, 📊 Executive Summary, 📌 Key Concepts & Principles, 💡 Practical Takeaways & Summary), and clear structured bullet points.
         Context: {context}"""
 
     try:
-        text = generate_with_fallback(prompt)
+        task_category = "fast_interactive" if tool_type in ["flashcard", "mindmap", "report"] else "standard"
+        text = generate_with_fallback(prompt, task_type=task_category)
         if text.startswith("AI Error:"): return jsonify({"type": "text", "data": text})
 
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -1134,8 +1207,11 @@ def stream_studio_item():
     context = rank_and_assemble_rag_context(filtered_sources, max_chars=12000)
 
     if tool_type == "report":
-        prompt = f"""Write an executive briefing document in {output_language}.
-        Structure with clear section headings containing relevant emojis (e.g. 🎯 Purpose, 📊 Executive Summary, 📌 Key Findings, 💡 Recommendations), metadata fields (**Date:** Value, **To:** Value, **Subject:** Value), and concise bullet points (- Point).
+        today_str = datetime.datetime.now().strftime("%B %d, %Y")
+        prompt = f"""Write a comprehensive study briefing document in {output_language}.
+        Start with the header line: **Generated Date:** {today_str}
+        Do NOT include 'To:' or 'Subject:' metadata lines.
+        Structure with clear section headings containing relevant emojis (e.g. 🎯 Core Objectives, 📊 Executive Summary, 📌 Key Concepts & Principles, 💡 Practical Takeaways & Summary), and clear structured bullet points.
         Context: {context}"""
     else:
         prompt = f"""Generate comprehensive structured study notes in {output_language} with headings, key points, definitions, code/formula examples, and takeaways.
@@ -1356,6 +1432,44 @@ def get_notebook_mistakes():
     return jsonify({"mistakes_count": len(mistakes), "mistakes": mistakes})
 
 
+@app.route('/api/mistakes-bank/all', methods=['GET'])
+def get_all_user_mistakes():
+    user_email = request.args.get('user_email', '').strip()
+    all_nb = []
+    if USING_MONGO:
+        query = {}
+        if user_email:
+            query = {"$or": [{"user_email": user_email}, {"user_email": "guest"}, {"user_email": ""}]}
+        all_nb = list(notebooks_col.find(query))
+    else:
+        for nb in memory_notebooks:
+            if not user_email or nb.get('user_email') == user_email or nb.get('user_email') == 'guest':
+                all_nb.append(nb)
+
+    grouped_mistakes = []
+    total_mistakes = 0
+    for nb in all_nb:
+        mistakes = nb.get('mistakes_bank', [])
+        if mistakes:
+            total_mistakes += len(mistakes)
+            grouped_mistakes.append({
+                "notebook_id": nb.get('id'),
+                "course_name": nb.get('title', 'Notebook'),
+                "mistakes_count": len(mistakes),
+                "mistakes": mistakes,
+                "sources": [s.get('name') for s in nb.get('sources', []) if isinstance(s, dict)]
+            })
+
+    grouped_mistakes.sort(key=lambda x: x['mistakes_count'], reverse=True)
+
+    return jsonify({
+        "success": True,
+        "total_mistakes": total_mistakes,
+        "courses_count": len(grouped_mistakes),
+        "courses": grouped_mistakes
+    }), 200
+
+
 @app.route('/api/quizzes/<quiz_id>', methods=['GET'])
 def get_saved_quiz_by_id(quiz_id):
     notebook_id = request.args.get('notebook_id')
@@ -1463,6 +1577,8 @@ def generate_active_plan():
     data = request.json or {}
     email = data.get('email', 'guest')
     notebook_ids = data.get('notebook_ids', [])
+    source_ids = data.get('source_ids', [])
+    source_ids_set = {str(s).strip() for s in source_ids if str(s).strip()}
     duration_option = data.get('duration_option', 'AI Automated')  # 1 Day, 3 Days, 7 Days, AI Automated
     try:
         daily_hours = float(data.get('daily_hours', 2.0))
@@ -1474,6 +1590,7 @@ def generate_active_plan():
 
     collected_sources = []
     notebook_titles = []
+    collected_mistakes = []
     
     for n_id in notebook_ids:
         nb = get_notebook(n_id)
@@ -1481,8 +1598,22 @@ def generate_active_plan():
             nb_title = nb.get("title", "Untitled Subject")
             notebook_titles.append(nb_title)
             for idx, source in enumerate(nb.get("sources", [])):
-                src_title = source.get("title", f"Topic {idx+1}")
+                src_id = str(source.get("id") or "").strip()
+                src_title = str(source.get("title") or f"Topic {idx+1}").strip()
+                src_filename = str(source.get("filename") or "").strip()
                 src_content = source.get("content", "").strip()
+
+                if source_ids_set:
+                    is_match = (
+                        src_id in source_ids_set or
+                        src_title in source_ids_set or
+                        src_filename in source_ids_set or
+                        str(idx) in source_ids_set or
+                        str(idx + 1) in source_ids_set
+                    )
+                    if not is_match:
+                        continue
+
                 if src_content:
                     collected_sources.append({
                         "notebook_id": n_id,
@@ -1490,9 +1621,16 @@ def generate_active_plan():
                         "source_title": src_title,
                         "content_preview": src_content[:1500]
                     })
+            for m in nb.get("mistakes_bank", []):
+                collected_mistakes.append({
+                    "question": m.get("question", ""),
+                    "user_answer": m.get("user_answer", ""),
+                    "correct_answer": m.get("correct_answer", ""),
+                    "explanation": m.get("explanation", "")
+                })
 
     if not collected_sources:
-        return jsonify({"error": "Selected notebooks do not have lecture content or topics. Please upload notes first."}), 400
+        return jsonify({"error": "Selected topics do not have lecture content. Please ensure topics have uploaded notes."}), 400
 
     total_sources_count = len(collected_sources)
     total_daily_minutes = int(daily_hours * 60)
@@ -1525,35 +1663,37 @@ def generate_active_plan():
     for idx, s in enumerate(collected_sources, 1):
         sources_catalog_text += f"[{idx}] {s['notebook_title']} -> {s['source_title']}\nSummary Excerpt:\n{s['content_preview']}\n\n"
 
-    # --- GEMINI SYSTEM PROMPT FOR DETAILED ACTIVE AI ROADMAP ---
-    prompt = f"""You are a master Academic Curriculum Architect & Pedagogical AI Specialist for Note2Quiz.
-Your objective is to build a thorough, highly-detailed, and trackable day-by-day Active Study Roadmap that comprehensively covers ALL {total_sources_count} selected lecture topics across {', '.join(notebook_titles)}.
+    mistakes_catalog_text = ""
+    if collected_mistakes:
+        mistakes_catalog_text = "USER'S REAL PAST MISTAKES FROM THESE NOTEBOOKS (Weave into SM-2 Review Drills):\n"
+        for m_idx, m in enumerate(collected_mistakes[:8], 1):
+            mistakes_catalog_text += f"- Mistake {m_idx}: Q: {m['question']} | Missed Answer: {m['user_answer']} | Correct: {m['correct_answer']}\n"
 
-CRITICAL PEDAGOGICAL RULES (MUST FOLLOW STRICTLY):
+    # --- GEMINI SYSTEM PROMPT FOR ADVANCED SM-2 ACTIVE AI ROADMAP ---
+    prompt = f"""You are a master Academic Curriculum Architect & Pedagogical AI Specialist implementing the SuperMemo-2 (SM-2) Spaced Repetition Science for Note2Quiz.
+Your objective is to build a thorough, cognitively-optimized day-by-day Active Study Roadmap across {target_days} Days covering ALL {total_sources_count} lecture topics across {', '.join(notebook_titles)}.
+
+PEDAGOGICAL & SM-2 ARCHITECTURE RULES (STRICTLY ENFORCED):
 1. COMPLETE SYLLABUS COVERAGE (ZERO TOPIC OMISSION):
-   - Here is the complete list of all {total_sources_count} selected topics:
+   - Every single one of the {total_sources_count} topics below MUST be scheduled across the {target_days} study days:
 {sources_catalog_text}
-   - EVERY SINGLE ONE of the {total_sources_count} topics listed above MUST be explicitly scheduled into the roadmap across the {target_days} study days. DO NOT SKIP OR LEAVE OUT ANY TOPIC.
+{mistakes_catalog_text}
 
-2. DETAILED & SPECIFIC HEADERS AND TASK TITLES:
-   - DO NOT use vague generic titles like "Read AI Notes", "Study Core Concepts", or "Chapter Review".
-   - Every single task title MUST clearly specify the exact Topic Name(s) and Subject code.
-   - Required Title Examples:
-     * "Read AI Notes: Topic 1 (Intro to Graphs) & Topic 2 (Binary Search Trees) [UCCD1024]"
-     * "Active Recall Flashcards: Topic 3 (AVL Trees & Rotations) [UCCD1024]"
-     * "Checkpoint Quiz: Topic 1 to 3 Diagnostic Assessment [UCCD1024]"
-     * "Read AI Notes: Topic 1 (3D Coordinate Systems & Vectors) [UCCD3084]"
-     * "Diagnostic Quiz: Topic 4 & 5 Vector Math & Matrix Transformations [UCCD3084]"
+2. SM-2 SPACED REPETITION & INTERLEAVED RECALL PROTOCOL:
+   - Initial Learning (Repetition 1, Day 1..N): Initial conceptual encoding (AI Synthesized Notes, Core Terms Flashcards, Diagnostic Assessment).
+   - SM-2 Interleaved Review (Repetition 2 & 3, Interval 1d, 3d, 6d):
+     * On Day 3, 5, 7, 10, weave in dedicated SM-2 Spaced Recall tasks (labeled "🧠 SM-2 Spaced Recall: [Topic]") that pull previously covered high-yield concepts and past mistakes back into active retrieval practice.
+     * Mark these tasks with `"is_sm2_review": true`, `"sm2_interval": "3d"`, and `"ease_factor": 2.5`.
 
-3. STRUCTURE & ACTIVE STUDY MODULES PER DAY:
-   - Plan length: Exactly {target_days} Days.
-   - Daily Available Study Time: {daily_hours} hrs/day ({total_daily_minutes} mins/day).
-   - Distribute the {total_sources_count} topics logically across all {target_days} days.
-   - Day titles MUST summarize the specific topics covered on that day (e.g. "Day 1: Graph Theory & Binary Trees [UCCD1024]").
-   - Each day MUST contain 3 to 5 structured tasks with rich, interactive working content in 'payload':
-     a) "note": Comprehensive synthesized study note with clean headings, markdown, definitions, and code/formulas.
-     b) "flashcard": 8-12 term-definition active recall pairs for the day's topics.
-     c) "quiz": 4-8 diagnostic multiple-choice questions with 4 options, randomized answer, hints, and explanations.
+3. COGNITIVE LOAD & DIFFICULTY TIERING:
+   - Tag every task with:
+     * `"difficulty_tier"`: "Foundational" | "Intermediate" | "High-Yield Exam Focus"
+     * `"cognitive_load"`: "Light" | "Moderate" | "Deep Focus"
+
+4. INTERACTIVE WORKING MODULES IN 'payload':
+   - "note": Comprehensive study note with markdown, LaTeX math/code, definitions, core theorems.
+   - "flashcard": 8-12 high-impact active recall term-definition pairs.
+   - "quiz": 4-8 diagnostic multiple-choice questions with 4 options, randomized answer, hints, and explanations.
 
 Return ONLY a strict JSON object following this EXACT schema (do NOT wrap in ```json markdown formatting):
 
@@ -1561,25 +1701,37 @@ Return ONLY a strict JSON object following this EXACT schema (do NOT wrap in ```
   "roadmap_title": "Active Roadmap: {', '.join(notebook_titles)} ({total_sources_count} Topics, {target_days} Days)",
   "recommended_days": {target_days},
   "total_topics_count": {total_sources_count},
+  "sm2_enabled": true,
   "days": [
     {{
       "day_number": 1,
       "title": "Day 1: [Specific Topic Names Covered on Day 1]",
       "estimated_minutes": {total_daily_minutes},
       "topics_covered": ["Topic 1 Name", "Topic 2 Name"],
+      "focus_objective": "Initial encoding & active recall of fundamental principles",
       "tasks": [
         {{
           "title": "Read AI Notes: Topic 1 (Name) & Topic 2 (Name) [{notebook_titles[0]}]",
           "action_type": "note",
+          "is_sm2_review": false,
+          "sm2_interval": "1d",
+          "difficulty_tier": "Foundational",
+          "cognitive_load": "Deep Focus",
+          "ease_factor": 2.5,
           "notebook_id": "{notebook_ids[0]}",
           "notebook_title": "{notebook_titles[0]}",
           "payload": {{
-            "summary_text": "## 📌 Topic 1 & 2 Synthesis\n### 1. Key Principles\n- **Core Concept**: Detailed explanation...\n\n### 2. Formulas & Implementation\n- Code or step-by-step example...\n\n### 3. Exam Takeaways\n- Key points to remember..."
+            "summary_text": "## 📌 Topic Synthesis\n### 1. Key Principles\n- **Core Concept**: Detailed explanation...\n\n### 2. Formulas & Implementation\n- Code or step-by-step example...\n\n### 3. Exam Takeaways\n- Key points to remember..."
           }}
         }},
         {{
           "title": "Active Recall Flashcards: Topic 1 & 2 Core Terms [{notebook_titles[0]}]",
           "action_type": "flashcard",
+          "is_sm2_review": false,
+          "sm2_interval": "1d",
+          "difficulty_tier": "Intermediate",
+          "cognitive_load": "Moderate",
+          "ease_factor": 2.5,
           "notebook_id": "{notebook_ids[0]}",
           "notebook_title": "{notebook_titles[0]}",
           "payload": {{
@@ -1592,6 +1744,11 @@ Return ONLY a strict JSON object following this EXACT schema (do NOT wrap in ```
         {{
           "title": "Checkpoint Quiz: Topic 1 & 2 Assessment [{notebook_titles[0]}]",
           "action_type": "quiz",
+          "is_sm2_review": false,
+          "sm2_interval": "1d",
+          "difficulty_tier": "High-Yield Exam Focus",
+          "cognitive_load": "Deep Focus",
+          "ease_factor": 2.5,
           "notebook_id": "{notebook_ids[0]}",
           "notebook_title": "{notebook_titles[0]}",
           "payload": {{
@@ -1611,16 +1768,30 @@ Return ONLY a strict JSON object following this EXACT schema (do NOT wrap in ```
   ]
 }}"""
 
-    log_activity(email, "Requested AI Roadmap", f"Notebooks: {notebook_titles}, Total Topics: {total_sources_count}, Duration: {target_days} Days")
+    log_activity(email, "Requested AI Roadmap", f"Notebooks: {notebook_titles}, Total Topics: {total_sources_count}, Duration: {target_days} Days, SM-2: Enabled")
 
     try:
-        raw_text = generate_with_fallback(prompt)
+        raw_text = generate_with_fallback(prompt, task_type="complex_structure")
         parsed_data = clean_ai_response(raw_text)
 
-        if not parsed_data or "days" not in parsed_data:
+        if isinstance(parsed_data, list):
+            full_dict = next((item for item in parsed_data if isinstance(item, dict) and "days" in item), None)
+            if full_dict:
+                parsed_data = full_dict
+            else:
+                day_items = [d for d in parsed_data if isinstance(d, dict) and ("tasks" in d or "day_number" in d)]
+                if day_items:
+                    parsed_data = {
+                        "roadmap_title": f"Active Roadmap: {', '.join(notebook_titles)} ({total_sources_count} Topics, {target_days} Days)",
+                        "recommended_days": target_days,
+                        "total_topics_count": total_sources_count,
+                        "days": day_items
+                    }
+
+        if not parsed_data or not isinstance(parsed_data, dict) or "days" not in parsed_data:
             return jsonify({"error": "Failed to generate valid roadmap JSON from Gemini API."}), 500
 
-        # Post-process tasks to assign unique task_ids and completion state
+        # Post-process tasks to assign unique task_ids, SM-2 attributes, and completion state
         processed_days = []
         total_tasks_count = 0
 
@@ -1642,6 +1813,11 @@ Return ONLY a strict JSON object following this EXACT schema (do NOT wrap in ```
                     "notebook_title": task.get("notebook_title", notebook_titles[0] if notebook_titles else "Subject"),
                     "title": task.get("title", "Study Task"),
                     "action_type": task.get("action_type", "note"),
+                    "is_sm2_review": task.get("is_sm2_review", False),
+                    "sm2_interval": task.get("sm2_interval", "1d"),
+                    "difficulty_tier": task.get("difficulty_tier", "Intermediate"),
+                    "cognitive_load": task.get("cognitive_load", "Moderate"),
+                    "ease_factor": float(task.get("ease_factor", 2.5)),
                     "completed": False,
                     "completed_at": None,
                     "payload": payload
@@ -1652,6 +1828,7 @@ Return ONLY a strict JSON object following this EXACT schema (do NOT wrap in ```
                 "title": day.get("title", f"Day {day.get('day_number', 1)} Plan"),
                 "estimated_minutes": day.get("estimated_minutes", total_daily_minutes),
                 "topics_covered": day.get("topics_covered", []),
+                "focus_objective": day.get("focus_objective", ""),
                 "tasks": day_tasks
             })
 
@@ -1664,6 +1841,7 @@ Return ONLY a strict JSON object following this EXACT schema (do NOT wrap in ```
             "notebook_titles": notebook_titles,
             "duration_option": f"{target_days} Days" if duration_option == 'AI Automated' else duration_option,
             "daily_hours": daily_hours,
+            "sm2_enabled": True,
             "total_tasks": total_tasks_count,
             "total_topics_count": total_sources_count,
             "covered_sources": [{"title": s["source_title"], "notebook": s["notebook_title"]} for s in collected_sources],

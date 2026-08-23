@@ -99,6 +99,8 @@ class _QuizScreenState extends State<QuizScreen> {
     });
   }
 
+  Future<void>? _savingFuture;
+
   Future<void> _saveQuizResult(int percent, int total) async {
     if (widget.notebookId == null) return;
     try {
@@ -141,7 +143,7 @@ class _QuizScreenState extends State<QuizScreen> {
     final percent = total == 0 ? 0 : ((_correctAnswers / total) * 100).round();
     final scheme = Theme.of(context).colorScheme;
 
-    _saveQuizResult(percent, total);
+    _savingFuture = _saveQuizResult(percent, total);
 
     showDialog(
       context: context,
@@ -178,21 +180,24 @@ class _QuizScreenState extends State<QuizScreen> {
               'Accuracy: $percent%',
               style: TextStyle(color: context.appColors.mutedText, fontSize: 15),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: context.appColors.surface,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: context.appColors.border),
               ),
               child: Row(
                 children: [
                   Icon(
-                    percent >= 80 ? Icons.emoji_events_outlined : Icons.track_changes_outlined,
-                    color: percent >= 80 ? Colors.amber : scheme.primary,
+                    widget.isWeaknessDrill
+                        ? (percent >= 80 ? Icons.military_tech : Icons.fitness_center)
+                        : (percent >= 80 ? Icons.emoji_events : Icons.trending_up),
+                    color: percent >= 80 ? Colors.amber : Colors.blueAccent,
+                    size: 24,
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       widget.isWeaknessDrill
@@ -240,9 +245,22 @@ class _QuizScreenState extends State<QuizScreen> {
               child: const Text('Review Answers'),
             ),
           FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
+            onPressed: () async {
+              if (_savingFuture != null) {
+                await _savingFuture;
+              }
+              if (context.mounted) {
+                Navigator.pop(context); // close dialog
+                Navigator.pop(context, {
+                  'completed': percent >= 80,
+                  'percentage': percent,
+                  'score': _score,
+                  'correct_answers': _correctAnswers,
+                  'total_questions': total,
+                  'user_answers': _userAnswers,
+                  'quiz_data': widget.quizData,
+                }); // return result map
+              }
             },
             child: const Text('Finish session'),
           ),
