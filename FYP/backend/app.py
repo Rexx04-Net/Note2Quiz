@@ -14,7 +14,8 @@ import uuid
 import datetime
 import time
 import re
-import random   
+import random
+import string
 import hashlib
 import google.generativeai as genai
 from flask import Flask, request, jsonify, Response, stream_with_context

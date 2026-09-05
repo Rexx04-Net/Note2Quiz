@@ -556,12 +556,21 @@ def direct_web_revision_page():
     key_concepts = ["Key Concepts"]
     course_name = "Subject Revision"
 
+    is_already_completed = False
+    prev_score = 0
+    prev_total = 2
+
     if auto_doc:
         course_name = auto_doc.get("course_name", course_name)
         for s in auto_doc.get("weekly_schedule", []):
             if s.get("week_number") == week_num:
                 topic_title = s.get("topic_title", topic_title)
                 key_concepts = s.get("key_concepts", key_concepts)
+                if s.get("status") == "QUIZ_COMPLETED" or s.get("quiz_record"):
+                    is_already_completed = True
+                    rec = s.get("quiz_record") or {}
+                    prev_score = rec.get("score", 0)
+                    prev_total = rec.get("total_questions", 2)
                 break
 
     # Build randomized HTML option buttons
@@ -574,7 +583,7 @@ def direct_web_revision_page():
     ]
     random.shuffle(q1_opts)
     letters = ["A", "B", "C", "D"]
-    q1_html = "".join([f'<button class="option-btn" onclick="selectOption(1, this, {str(is_corr).lower()})">{letters[i]}) {opt}</button>\n' for i, (opt, is_corr) in enumerate(q1_opts)])
+    q1_html = "".join([f'<button class="option-btn" data-correct="{str(is_corr).lower()}" onclick="selectOption(1, this, {str(is_corr).lower()})"><span class="opt-label">{letters[i]})</span> <span class="opt-text">{opt}</span></button>\n' for i, (opt, is_corr) in enumerate(q1_opts)])
 
     q2_opts = [
         ("Building strong conceptual retention and problem-solving readiness", True),
@@ -583,7 +592,25 @@ def direct_web_revision_page():
         ("Leaving assignments incomplete", False)
     ]
     random.shuffle(q2_opts)
-    q2_html = "".join([f'<button class="option-btn" onclick="selectOption(2, this, {str(is_corr).lower()})">{letters[i]}) {opt}</button>\n' for i, (opt, is_corr) in enumerate(q2_opts)])
+    q2_html = "".join([f'<button class="option-btn" data-correct="{str(is_corr).lower()}" onclick="selectOption(2, this, {str(is_corr).lower()})"><span class="opt-label">{letters[i]})</span> <span class="opt-text">{opt}</span></button>\n' for i, (opt, is_corr) in enumerate(q2_opts)])
+
+    import config
+    try:
+        server_ip = config._detect_server_ip()
+    except Exception:
+        server_ip = "172.20.10.4"
+    if not server_ip or server_ip in ("127.0.0.1", "localhost", "0.0.0.0"):
+        server_ip = "172.20.10.4"
+    dashboard_url = f"http://{server_ip}:8080"
+
+    completed_badge_html = f'<div class="completed-pill">✓ Completed ({prev_score}/{prev_total})</div>' if is_already_completed else ''
+    completed_notice_html = f'''<div class="completed-notice" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <div style="display:flex; align-items:center;">
+            <span style="font-size: 16px; margin-right: 6px;">🏆</span>
+            <span>You previously completed this revision (Score: <strong>{prev_score} / {prev_total}</strong>). You can practice again to keep your memory sharp!</span>
+        </div>
+        <a href="{dashboard_url}" style="color:#38bdf8; text-decoration:none; font-weight:700; font-size:12px; padding:4px 10px; border-radius:8px; background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.3); white-space:nowrap;" onclick="returnToDashboard(event)">Go to Dashboard &rarr;</a>
+    </div>''' if is_already_completed else ''
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -591,66 +618,94 @@ def direct_web_revision_page():
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Note2Quiz - Week {week_num} Revision: {topic_title}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: 'Outfit', sans-serif; }}
-        body {{ background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }}
-        .card {{ background: #1e293b; border: 1px solid #334155; border-radius: 20px; max-width: 650px; width: 100%; padding: 32px; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }}
-        .badge {{ display: inline-block; background: rgba(99, 102, 241, 0.2); color: #818cf8; font-weight: 600; font-size: 13px; padding: 6px 14px; border-radius: 20px; margin-bottom: 14px; }}
-        h1 {{ font-size: 24px; margin-bottom: 8px; color: #ffffff; }}
-        .sub {{ color: #94a3b8; font-size: 14px; margin-bottom: 24px; line-height: 1.5; }}
-        .question-box {{ background: #0f172a; border: 1px solid #334155; border-radius: 14px; padding: 20px; margin-bottom: 20px; }}
-        .q-title {{ font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #e2e8f0; }}
-        .option-btn {{ display: block; width: 100%; text-align: left; background: #1e293b; border: 1px solid #475569; color: #cbd5e1; padding: 14px 18px; border-radius: 10px; margin-bottom: 10px; cursor: pointer; font-size: 14px; transition: all 0.2s ease; }}
-        .option-btn:hover {{ border-color: #6366f1; background: rgba(99, 102, 241, 0.1); }}
-        .option-btn.selected {{ border-color: #6366f1; background: #6366f1; color: #ffffff; font-weight: 600; }}
-        .submit-btn {{ display: block; width: 100%; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: none; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 20px; transition: opacity 0.2s; }}
-        .submit-btn:hover {{ opacity: 0.9; }}
-        .result {{ display: none; text-align: center; padding: 30px 10px; }}
-        .result h2 {{ font-size: 28px; color: #4ade80; margin-bottom: 10px; }}
-        .result p {{ color: #94a3b8; margin-bottom: 20px; }}
-        .app-link {{ color: #818cf8; text-decoration: none; font-size: 13px; display: inline-block; margin-top: 15px; }}
+        body {{ background: #0b0f19; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 16px; }}
+        .card {{ background: #131b2e; border: 1px solid #1e293b; border-radius: 24px; max-width: 650px; width: 100%; padding: 28px; box-shadow: 0 24px 48px rgba(0,0,0,0.5); }}
+        .header-bar {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }}
+        .badge {{ display: inline-block; background: rgba(99, 102, 241, 0.2); color: #818cf8; font-weight: 700; font-size: 12px; padding: 6px 14px; border-radius: 20px; }}
+        .completed-pill {{ display: inline-flex; align-items: center; background: rgba(34, 197, 94, 0.18); border: 1px solid rgba(34, 197, 94, 0.5); color: #4ade80; font-weight: 700; font-size: 12px; padding: 5px 14px; border-radius: 20px; }}
+        .completed-notice {{ background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.25); border-radius: 12px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #86efac; display: flex; align-items: center; line-height: 1.4; }}
+        h1 {{ font-size: 22px; margin-bottom: 6px; color: #ffffff; font-weight: 800; }}
+        .sub {{ color: #94a3b8; font-size: 14px; margin-bottom: 20px; line-height: 1.5; }}
+        .question-box {{ background: #0a0f1d; border: 1px solid #1e293b; border-radius: 16px; padding: 20px; margin-bottom: 18px; transition: border-color 0.2s; }}
+        .q-title {{ font-size: 15px; font-weight: 700; margin-bottom: 14px; color: #e2e8f0; line-height: 1.5; }}
+        .option-btn {{ display: flex; align-items: flex-start; width: 100%; text-align: left; background: #131b2e; border: 1.5px solid #23314e; color: #cbd5e1; padding: 13px 16px; border-radius: 12px; margin-bottom: 10px; cursor: pointer; font-size: 14px; transition: all 0.2s ease; line-height: 1.4; }}
+        .option-btn:hover:not([disabled]) {{ border-color: #6366f1; background: rgba(99, 102, 241, 0.12); }}
+        .option-btn.selected {{ border-color: #6366f1; background: #4f46e5; color: #ffffff; font-weight: 600; }}
+        .option-btn.is-correct {{ border-color: #22c55e !important; background: rgba(34, 197, 94, 0.16) !important; color: #86efac !important; font-weight: 600; }}
+        .option-btn.is-wrong {{ border-color: #ef4444 !important; background: rgba(239, 68, 68, 0.18) !important; color: #fca5a5 !important; text-decoration: line-through; }}
+        .opt-label {{ font-weight: 700; margin-right: 8px; flex-shrink: 0; }}
+        .opt-text {{ flex-grow: 1; }}
+        .explanation-box {{ background: rgba(99, 102, 241, 0.08); border-left: 3px solid #6366f1; border-radius: 8px; padding: 12px 14px; margin-top: 14px; font-size: 13px; color: #cbd5e1; line-height: 1.5; animation: fadeIn 0.3s ease; }}
+        @keyframes fadeIn {{ from {{ opacity: 0; transform: translateY(-4px); }} to {{ opacity: 1; transform: translateY(0); }} }}
+        .submit-btn {{ display: block; width: 100%; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: none; padding: 16px; border-radius: 14px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 16px; transition: opacity 0.2s; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3); }}
+        .submit-btn:hover {{ opacity: 0.92; }}
+        .result {{ text-align: center; padding: 24px 10px 10px 10px; border-top: 1px solid #1e293b; margin-top: 20px; }}
+        .score-pill {{ display: inline-block; font-size: 32px; font-weight: 800; color: #4ade80; margin: 10px 0 6px 0; }}
+        .feedback-text {{ color: #94a3b8; font-size: 14px; margin-bottom: 20px; line-height: 1.5; }}
     </style>
 </head>
 <body>
     <div class="card">
-        <div id="quiz-section">
+        <div class="header-bar">
             <span class="badge">Week {week_num} Active Revision</span>
+            <div style="display:flex; align-items:center; gap:8px;">
+                {completed_badge_html}
+                <a href="{dashboard_url}" style="color:#94a3b8; font-size:12px; text-decoration:none; padding:4px 10px; border:1px solid #334155; border-radius:16px; background:rgba(30,41,59,0.6); font-weight:600; display:inline-flex; align-items:center; gap:4px;" onclick="returnToDashboard(event)">🏠 Dashboard</a>
+            </div>
+        </div>
+
+        {completed_notice_html}
+
+        <div id="quiz-section">
             <h1>{course_name}</h1>
             <p class="sub"><strong>Topic:</strong> {topic_title}</p>
             
-            <div class="question-box">
+            <div class="question-box" id="q-box-1">
                 <div class="q-title">Q1: Which approach best reinforces your understanding of {topic_title}?</div>
                 {q1_html}
+                <div class="explanation-box" id="exp-1" style="display:none;">
+                    <strong>💡 Answer Explanation:</strong> Active recall through systematic quizzes forces memory retrieval, strengthening synaptic pathways for long-term retention far better than passive reading.
+                </div>
             </div>
 
-            <div class="question-box">
+            <div class="question-box" id="q-box-2">
                 <div class="q-title">Q2: In {course_name}, what is the key outcome of mastering {key_concepts[0] if key_concepts else topic_title}?</div>
                 {q2_html}
+                <div class="explanation-box" id="exp-2" style="display:none;">
+                    <strong>💡 Answer Explanation:</strong> Building solid conceptual mastery constructs the mental schema necessary to tackle complex practical assignments and higher-order exam questions.
+                </div>
             </div>
 
-            <button class="submit-btn" onclick="submitQuiz()">Complete Revision Quiz</button>
+            <button id="submit-action-btn" class="submit-btn" onclick="submitQuiz()">Complete Revision Quiz</button>
         </div>
 
-        <div id="result-section" class="result">
-            <h2>🎉 Revision Completed!</h2>
-            <p>Score: <strong id="score-text">2 / 2</strong> (100%)</p>
-            <p style="color:#cbd5e1; font-size:14px; margin-bottom: 20px;">Your progress has been synced to Note2Quiz and recorded on your schedule!</p>
+        <div id="result-section" class="result" style="display:none;">
+            <h2 id="result-title" style="font-size:24px; color:#4ade80;">🎉 Revision Completed!</h2>
+            <div class="score-pill" id="score-text">2 / 2 (100%)</div>
+            <p id="score-feedback" class="feedback-text"></p>
             
-            <button class="submit-btn" style="background:#3b82f6; margin-bottom: 12px;" onclick="returnToDashboard()">
-                ✨ Return to Note2Quiz Web Dashboard
+            <button class="submit-btn" style="background:#10b981; margin-bottom: 12px;" onclick="retakeQuiz()">
+                🔄 Re-practice (Try Again)
             </button>
-            <button class="submit-btn" style="background:#1e293b; border: 1px solid #475569; font-size: 14px; padding: 12px; margin-bottom: 12px;" onclick="launchMobileApp()">
+            <a href="{dashboard_url}" class="submit-btn" style="background:#3b82f6; margin-bottom: 12px; text-decoration:none; display:flex; align-items:center; justify-content:center;" onclick="returnToDashboard(event)">
+                ✨ Return to Note2Quiz Web Dashboard
+            </a>
+            <button class="submit-btn" style="background:#131b2e; border: 1.5px solid #334155; font-size: 14px; padding: 12px; margin-bottom: 12px;" onclick="launchMobileApp()">
                 📱 Launch Note2Quiz Mobile App
             </button>
-            <div style="font-size:12px; color:#94a3b8;">(Or you can safely close this browser tab)</div>
+            <div style="font-size:12px; color:#64748b;">(Answers checked above · You can safely close this browser tab)</div>
         </div>
     </div>
 
     <script>
-        const answers = {{ 1: false, 2: false }};
+        const answers = {{ 1: null, 2: null }};
+        let submitted = false;
 
         function selectOption(qNum, btn, isCorrect) {{
+            if (submitted) return;
             const parent = btn.parentElement;
             parent.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
@@ -658,9 +713,35 @@ def direct_web_revision_page():
         }}
 
         async function submitQuiz() {{
+            if (answers[1] === null || answers[2] === null) {{
+                alert("Please select an answer for each question before completing!");
+                return;
+            }}
+
             let score = 0;
-            if (answers[1]) score++;
-            if (answers[2]) score++;
+            if (answers[1] === true) score++;
+            if (answers[2] === true) score++;
+            submitted = true;
+
+            // Highlight correct/incorrect answers and show explanations on each question
+            [1, 2].forEach(qNum => {{
+                const box = document.getElementById('q-box-' + qNum);
+                const buttons = box.querySelectorAll('.option-btn');
+                buttons.forEach(b => {{
+                    b.disabled = true;
+                    b.style.cursor = 'default';
+                    const isCorrect = b.getAttribute('data-correct') === 'true';
+                    if (isCorrect) {{
+                        b.classList.add('is-correct');
+                        b.innerHTML += ' <span style="margin-left:auto; font-weight:bold; color:#4ade80;">✓ Correct</span>';
+                    }} else if (b.classList.contains('selected')) {{
+                        b.classList.add('is-wrong');
+                        b.innerHTML += ' <span style="margin-left:auto; font-weight:bold; color:#f87171;">✗ Your Answer</span>';
+                    }}
+                }});
+                const exp = document.getElementById('exp-' + qNum);
+                if (exp) exp.style.display = 'block';
+            }});
 
             try {{
                 await fetch('/api/automations/quiz-completed', {{
@@ -678,36 +759,82 @@ def direct_web_revision_page():
                 console.error("Submission failed:", e);
             }}
 
-            document.getElementById('quiz-section').style.display = 'none';
-            document.getElementById('score-text').innerText = score + ' / 2';
+            document.getElementById('submit-action-btn').style.display = 'none';
+            const pct = Math.round((score / 2) * 100);
+            const scoreElem = document.getElementById('score-text');
+            scoreElem.innerText = `${{score}} / 2 (${{pct}}%)`;
+
+            const titleElem = document.getElementById('result-title');
+            const feedbackElem = document.getElementById('score-feedback');
+
+            if (score === 2) {{
+                titleElem.innerText = "🎉 Perfect Recall!";
+                titleElem.style.color = "#4ade80";
+                scoreElem.style.color = "#4ade80";
+                feedbackElem.innerText = "Outstanding! You got 100% on this topic. Your memory consolidation is on track.";
+            }} else if (score === 1) {{
+                titleElem.innerText = "👍 Good Progress!";
+                titleElem.style.color = "#facc15";
+                scoreElem.style.color = "#facc15";
+                feedbackElem.innerText = "You scored 50%. Review the explanations highlighted above to solidify the concepts.";
+            }} else {{
+                titleElem.innerText = "📚 Revision Submitted!";
+                titleElem.style.color = "#f87171";
+                scoreElem.style.color = "#f87171";
+                feedbackElem.innerText = "Review the green correct answers and explanations above to reinforce your understanding.";
+            }}
+
             document.getElementById('result-section').style.display = 'block';
+            document.getElementById('result-section').scrollIntoView({{ behavior: 'smooth' }});
         }}
 
-        function returnToDashboard() {{
+        function retakeQuiz() {{
+            submitted = false;
+            answers[1] = null;
+            answers[2] = null;
+
+            [1, 2].forEach(qNum => {{
+                const box = document.getElementById('q-box-' + qNum);
+                const buttons = box.querySelectorAll('.option-btn');
+                buttons.forEach(b => {{
+                    b.disabled = false;
+                    b.style.cursor = 'pointer';
+                    b.classList.remove('selected', 'is-correct', 'is-wrong');
+                    const badge = b.querySelector('span[style*="margin-left:auto"]');
+                    if (badge) badge.remove();
+                }});
+                const exp = document.getElementById('exp-' + qNum);
+                if (exp) exp.style.display = 'none';
+            }});
+
+            document.getElementById('result-section').style.display = 'none';
+            document.getElementById('submit-action-btn').style.display = 'block';
+            window.scrollTo({{ top: 0, behavior: 'smooth' }});
+        }}
+
+        function returnToDashboard(event) {{
             if (window.opener && !window.opener.closed) {{
                 try {{
                     window.opener.focus();
                     window.close();
+                    if (event) event.preventDefault();
                     return;
                 }} catch(e) {{}}
             }}
-            window.close();
-            setTimeout(() => {{
-                if (document.referrer && document.referrer.includes('localhost:')) {{
-                    window.location.href = document.referrer;
-                }} else {{
-                    window.location.href = "http://localhost:60627";
-                }}
-            }}, 250);
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {{
+                window.location.href = "http://localhost:8080";
+                if (event) event.preventDefault();
+                return;
+            }}
+            window.location.href = "{dashboard_url}";
+            if (event) event.preventDefault();
         }}
 
         function launchMobileApp() {{
             const mobileUrl = "note2quiz://revision?notebook_id={notebook_id}&week_number={week_num}";
-            // Attempt protocol launch
             window.location.href = mobileUrl;
-            // Fallback for desktop browsers without app installed
             setTimeout(() => {{
-                alert("If Note2Quiz app didn't open, please ensure the mobile app is installed, or use the 'Return to Note2Quiz Tab' button for the Web App!");
+                alert("If Note2Quiz app didn't open, please use the 'Return to Note2Quiz Web Dashboard' button!");
             }}, 1000);
         }}
     </script>

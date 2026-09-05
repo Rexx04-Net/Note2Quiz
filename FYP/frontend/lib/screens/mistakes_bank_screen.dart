@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import '../config.dart';
 import '../theme/app_theme.dart';
@@ -90,16 +91,25 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(
+      builder: (_) => Center(
         child: Card(
-          child: Padding(
-            padding: EdgeInsets.all(24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: const Padding(
+            padding: EdgeInsets.all(28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('AI generating tailored weakness drill...'),
+                SizedBox(height: 18),
+                Text(
+                  'AI generating tailored weakness drill...',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'Selecting questions targeting your specific error patterns',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
               ],
             ),
           ),
@@ -108,12 +118,15 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
     );
 
     try {
+      final email = widget.userEmail ?? '';
+      final url = '$baseUrl/api/mistakes-bank/generate-drill';
       final res = await http.post(
-        Uri.parse('$baseUrl/generate-weakness-drill'),
+        Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
+          'user_email': email,
           'notebook_id': notebookId,
-          'user_email': widget.userEmail ?? 'guest',
+          'num_questions': 5,
         }),
       );
 
@@ -122,27 +135,33 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        if (data['success'] == true && data['quiz'] != null) {
-          final List<dynamic> questions = data['quiz'];
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => QuizScreen(
-                quizData: questions,
-                notebookId: notebookId,
-                userEmail: widget.userEmail,
-                isWeaknessDrill: true,
-              ),
-            ),
-          ).then((_) => _fetchMistakes());
-        } else {
+        final questions = data['drill_questions'] as List<dynamic>? ?? [];
+
+        if (questions.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(data['message'] ?? 'Could not generate weakness drill.')),
+            const SnackBar(content: Text('No active questions generated for this course yet.')),
           );
+          return;
+        }
+
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => QuizScreen(
+              quizData: questions,
+              notebookId: notebookId,
+              userEmail: widget.userEmail,
+              isWeaknessDrill: true,
+            ),
+          ),
+        );
+
+        if (result != null && mounted) {
+          _fetchMistakes();
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Server error: ${res.statusCode}')),
+          SnackBar(content: Text('Failed to generate drill: status ${res.statusCode}')),
         );
       }
     } catch (e) {
@@ -185,34 +204,17 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
     return Scaffold(
       backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: colors.surface,
-        elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: colors.primaryText, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: scheme.onSurface, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Row(
-          children: [
-            const Icon(Icons.track_changes_rounded, color: Colors.orangeAccent, size: 22),
-            const SizedBox(width: 10),
-            Text(
-              'Mistakes Bank & Remediation',
-              style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.orangeAccent.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.4)),
-              ),
-              child: Text(
-                '$_totalMistakes Total',
-                style: const TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
+        title: Text(
+          'Mistakes Bank & Remediation',
+          style: GoogleFonts.plusJakartaSans(
+            color: scheme.onSurface,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
         ),
         actions: [
           IconButton(
@@ -220,7 +222,7 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
             onPressed: _fetchMistakes,
             tooltip: 'Refresh',
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
         ],
       ),
       body: _isLoading
@@ -243,7 +245,7 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
             const SizedBox(height: 14),
             Text(_errorMessage ?? 'An error occurred', style: TextStyle(color: colors.mutedText)),
             const SizedBox(height: 16),
-            ElevatedButton(
+            FilledButton(
               onPressed: _fetchMistakes,
               child: const Text('Retry'),
             ),
@@ -265,23 +267,30 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: Colors.greenAccent.withValues(alpha: 0.15),
+                  color: colors.successSoft,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 64),
+                child: Icon(Icons.verified_rounded, color: colors.success, size: 64),
               ),
               const SizedBox(height: 20),
               Text(
-                '🎉 No Mistakes Recorded!',
-                style: TextStyle(color: scheme.onSurface, fontSize: 22, fontWeight: FontWeight.bold),
+                'Zero Weaknesses Detected!',
+                style: GoogleFonts.plusJakartaSans(
+                  color: scheme.onSurface,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 8),
-              Text(
-                'You have mastered all attempted quizzes, or have not taken any quizzes yet.\nTake regular quizzes to automatically log weak concepts here.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: colors.mutedText, fontSize: 14, height: 1.5),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Text(
+                  'Great job! You have conquered all attempted practice questions. As you complete more quizzes, questions answered incorrectly will automatically be cataloged here for targeted spaced repetition.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: colors.mutedText, fontSize: 14, height: 1.5),
+                ),
               ),
             ],
           ),
@@ -290,57 +299,93 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1000),
+          constraints: const BoxConstraints(maxWidth: 960),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Search & Filter Bar
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      style: TextStyle(color: scheme.onSurface, fontSize: 14),
-                      decoration: InputDecoration(
-                        hintText: 'Search questions, concepts, or answers...',
-                        hintStyle: TextStyle(color: colors.subtleText, fontSize: 13),
-                        prefixIcon: Icon(Icons.search_rounded, color: colors.mutedText, size: 20),
-                        filled: true,
-                        fillColor: colors.surface,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide(color: colors.border),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide(color: colors.border),
-                        ),
-                      ),
-                      onChanged: (val) => setState(() => _searchQuery = val),
+              // Adaptive Learning Overview Card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: colors.cardBorder),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: colors.warningSoft,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(Icons.psychology_rounded, color: colors.warning, size: 28),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Adaptive Spaced Repetition',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: scheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$_totalMistakes concepts currently queued for reinforcement across ${_courses.length} courses.',
+                            style: TextStyle(color: colors.mutedText, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
+
+              // Search & Filter
+              TextField(
+                style: TextStyle(color: scheme.onSurface, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Search mistake questions, concepts, or terms...',
+                  prefixIcon: Icon(Icons.search_rounded, color: colors.mutedText, size: 20),
+                ),
+                onChanged: (val) => setState(() => _searchQuery = val),
+              ),
+              const SizedBox(height: 14),
 
               // Course Filter Chips
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
                 child: Row(
                   children: [
-                    FilterChip(
+                    ChoiceChip(
                       label: Text('All Courses ($_totalMistakes)'),
                       selected: _selectedNotebookFilter == null,
                       onSelected: (selected) {
                         setState(() => _selectedNotebookFilter = null);
                       },
-                      selectedColor: Colors.orangeAccent.withValues(alpha: 0.2),
-                      checkmarkColor: Colors.orangeAccent,
+                      selectedColor: colors.primarySoft,
                       labelStyle: TextStyle(
-                        color: _selectedNotebookFilter == null ? Colors.orangeAccent : colors.mutedText,
+                        color: _selectedNotebookFilter == null ? scheme.primary : colors.mutedText,
                         fontWeight: _selectedNotebookFilter == null ? FontWeight.bold : FontWeight.normal,
                         fontSize: 12,
                       ),
@@ -355,7 +400,7 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
 
                       return Padding(
                         padding: const EdgeInsets.only(right: 8),
-                        child: FilterChip(
+                        child: ChoiceChip(
                           label: Text('$shortLabel ($count)'),
                           selected: isSelected,
                           onSelected: (selected) {
@@ -363,10 +408,9 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
                               _selectedNotebookFilter = selected ? nbId : null;
                             });
                           },
-                          selectedColor: Colors.orangeAccent.withValues(alpha: 0.2),
-                          checkmarkColor: Colors.orangeAccent,
+                          selectedColor: colors.primarySoft,
                           labelStyle: TextStyle(
-                            color: isSelected ? Colors.orangeAccent : colors.mutedText,
+                            color: isSelected ? scheme.primary : colors.mutedText,
                             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                             fontSize: 12,
                           ),
@@ -376,7 +420,7 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
               // Courses Mistakes List
               if (filteredCourses.isEmpty)
@@ -420,11 +464,18 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
     final isExpanded = _expandedCourses.contains(nbId);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: const EdgeInsets.only(bottom: 18),
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: colors.border),
+        border: Border.all(color: colors.cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -451,10 +502,10 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.orangeAccent.withValues(alpha: 0.15),
+                      color: colors.warningSoft,
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: const Icon(Icons.bookmark_border_rounded, color: Colors.orangeAccent, size: 22),
+                    child: Icon(Icons.bookmark_outline_rounded, color: colors.warning, size: 22),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -463,13 +514,13 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
                       children: [
                         Text(
                           courseName,
-                          style: TextStyle(
+                          style: GoogleFonts.plusJakartaSans(
                             color: scheme.onSurface,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 3),
                         Text(
                           '$mistakesCount recorded mistakes',
                           style: TextStyle(color: colors.mutedText, fontSize: 12),
@@ -481,15 +532,15 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
                   FilledButton.icon(
                     onPressed: () => _launchWeaknessDrill(nbId, courseName),
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.orangeAccent.shade700,
-                      foregroundColor: Colors.white,
+                      backgroundColor: colors.warning,
+                      foregroundColor: Colors.black,
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     icon: const Icon(Icons.flash_on_rounded, size: 16),
-                    label: const Text('Weakness Drill', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    label: const Text('Practice Drill', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Icon(
                     isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
                     color: colors.mutedText,
@@ -501,13 +552,13 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
 
           // Mistakes List
           if (isExpanded) ...[
-            const Divider(height: 1),
+            Divider(height: 1, color: colors.border),
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
               itemCount: mistakes.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 16),
+              separatorBuilder: (context, index) => const SizedBox(height: 14),
               itemBuilder: (context, index) {
                 final m = mistakes[index] as Map<String, dynamic>;
                 return _buildMistakeCard(m, index + 1);
@@ -533,7 +584,7 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colors.surfaceAlt,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: colors.border),
       ),
       child: Column(
@@ -546,56 +597,56 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.redAccent.withValues(alpha: 0.15),
+                  color: colors.errorSoft,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   '#$index',
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: colors.error, fontSize: 11, fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   question,
-                  style: TextStyle(
+                  style: GoogleFonts.plusJakartaSans(
                     color: scheme.onSurface,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    height: 1.4,
+                    height: 1.45,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
           // User's Wrong Answer
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+              color: colors.errorSoft,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: colors.error.withValues(alpha: 0.3)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.close_rounded, color: Colors.redAccent, size: 16),
+                Icon(Icons.cancel_rounded, color: colors.error, size: 16),
                 const SizedBox(width: 8),
                 Expanded(
                   child: RichText(
                     text: TextSpan(
                       children: [
-                        const TextSpan(
-                          text: 'Your Answer: ',
-                          style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                        TextSpan(
+                          text: 'Previous Mistake: ',
+                          style: TextStyle(color: colors.error, fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                         TextSpan(
                           text: userAns.toString(),
-                          style: const TextStyle(
-                            color: Colors.redAccent,
+                          style: TextStyle(
+                            color: colors.error,
                             fontSize: 12,
                             decoration: TextDecoration.lineThrough,
                           ),
@@ -612,24 +663,24 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
           // Correct Answer
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.3)),
+              color: colors.successSoft,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: colors.success.withValues(alpha: 0.3)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.check_circle_outline_rounded, color: Colors.greenAccent, size: 16),
+                Icon(Icons.check_circle_rounded, color: colors.success, size: 16),
                 const SizedBox(width: 8),
                 Expanded(
                   child: RichText(
                     text: TextSpan(
                       children: [
-                        const TextSpan(
+                        TextSpan(
                           text: 'Correct Concept: ',
-                          style: TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: colors.success, fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                         TextSpan(
                           text: correctAns.toString(),
@@ -650,19 +701,19 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.purple.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.2)),
+                color: colors.primarySoft,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: scheme.primary.withValues(alpha: 0.2)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.lightbulb_outline_rounded, color: Colors.purpleAccent, size: 16),
+                  Icon(Icons.lightbulb_outline_rounded, color: scheme.primary, size: 16),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       explanation,
-                      style: TextStyle(color: colors.mutedText, fontSize: 12, height: 1.4),
+                      style: TextStyle(color: colors.mutedText, fontSize: 12, height: 1.45),
                     ),
                   ),
                 ],

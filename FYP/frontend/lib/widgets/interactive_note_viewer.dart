@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+
+enum NoteReadingTheme { system, sepia, midnight }
 
 class InteractiveNoteViewer extends StatefulWidget {
   final String content;
@@ -23,6 +26,7 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
   bool _showSearch = false;
+  NoteReadingTheme _readingTheme = NoteReadingTheme.system;
 
   @override
   void dispose() {
@@ -36,47 +40,85 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
       SnackBar(
         content: const Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.greenAccent),
+            Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
             SizedBox(width: 10),
             Text('Note content copied to clipboard!'),
           ],
         ),
         backgroundColor: Theme.of(context).colorScheme.surface,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
+  }
+
+  Color _getReaderBg(BuildContext context) {
+    switch (_readingTheme) {
+      case NoteReadingTheme.sepia:
+        return const Color(0xFFFBF0D9);
+      case NoteReadingTheme.midnight:
+        return const Color(0xFF090D16);
+      case NoteReadingTheme.system:
+        return context.appColors.background;
+    }
+  }
+
+  Color _getReaderText(BuildContext context) {
+    switch (_readingTheme) {
+      case NoteReadingTheme.sepia:
+        return const Color(0xFF3F301D);
+      case NoteReadingTheme.midnight:
+        return const Color(0xFFE2E8F0);
+      case NoteReadingTheme.system:
+        return Theme.of(context).colorScheme.onSurface;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final scheme = Theme.of(context).colorScheme;
+    final readerBg = _getReaderBg(context);
+    final readerText = _getReaderText(context);
 
     final parsedBlocks = _parseMarkdownToBlocks(widget.content);
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Interactive Control Toolbar
+        // Reader Control Toolbar
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          margin: const EdgeInsets.only(bottom: 16),
+          margin: const EdgeInsets.only(bottom: 14),
           decoration: BoxDecoration(
-            color: colors.surfaceAlt,
+            color: colors.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: colors.border),
+            border: Border.all(color: colors.cardBorder),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Row(
             children: [
               if (widget.title != null) ...[
-                Icon(Icons.auto_awesome, size: 18, color: scheme.primary),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.auto_awesome_rounded, size: 16, color: scheme.primary),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     widget.title!,
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
                       fontSize: 14,
                       color: scheme.onSurface,
                     ),
@@ -89,46 +131,105 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6C63FF).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF6C63FF).withValues(alpha: 0.4)),
+                    color: scheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: scheme.primary.withValues(alpha: 0.3)),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(
                         width: 10,
                         height: 10,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF6C63FF)),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: scheme.primary),
                       ),
-                      SizedBox(width: 6),
+                      const SizedBox(width: 6),
                       Text(
-                        '⚡ Live Streaming',
-                        style: TextStyle(color: Color(0xFF6C63FF), fontSize: 11, fontWeight: FontWeight.bold),
+                        'AI Generating',
+                        style: TextStyle(
+                          color: scheme.primary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
               ],
-              // Font size controls
-              IconButton(
-                icon: const Icon(Icons.format_size, size: 18),
-                tooltip: 'Cycle Font Size',
-                onPressed: () {
-                  setState(() {
-                    if (_fontSize >= 19.0) {
-                      _fontSize = 13.0;
-                    } else {
-                      _fontSize += 2.0;
-                    }
-                  });
-                },
+
+              // Font Size Adjustment Pills
+              Container(
+                decoration: BoxDecoration(
+                  color: colors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Text('A-', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      tooltip: 'Decrease font size',
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        if (_fontSize > 13.0) {
+                          setState(() => _fontSize -= 1.5);
+                        }
+                      },
+                    ),
+                    Container(width: 1, height: 16, color: colors.border),
+                    IconButton(
+                      icon: const Text('A+', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      tooltip: 'Increase font size',
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        if (_fontSize < 22.0) {
+                          setState(() => _fontSize += 1.5);
+                        }
+                      },
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 6),
+
+              // Reading Mode Switcher
+              PopupMenuButton<NoteReadingTheme>(
+                tooltip: 'Reading Tone',
+                color: colors.surface,
+                icon: Icon(
+                  _readingTheme == NoteReadingTheme.sepia
+                      ? Icons.wb_sunny_outlined
+                      : _readingTheme == NoteReadingTheme.midnight
+                          ? Icons.nights_stay_outlined
+                          : Icons.palette_outlined,
+                  size: 18,
+                  color: colors.mutedText,
+                ),
+                onSelected: (theme) => setState(() => _readingTheme = theme),
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: NoteReadingTheme.system,
+                    child: Text('Default Theme'),
+                  ),
+                  const PopupMenuItem(
+                    value: NoteReadingTheme.sepia,
+                    child: Text('Warm Sepia (Day Reading)'),
+                  ),
+                  const PopupMenuItem(
+                    value: NoteReadingTheme.midnight,
+                    child: Text('Midnight (Ultra Dark)'),
+                  ),
+                ],
+              ),
+
               // Search toggle
               IconButton(
-                icon: Icon(_showSearch ? Icons.search_off : Icons.search, size: 18),
-                tooltip: 'Search in Note',
+                icon: Icon(_showSearch ? Icons.search_off_rounded : Icons.search_rounded, size: 18),
+                tooltip: 'Search note',
+                color: _showSearch ? scheme.primary : colors.mutedText,
                 onPressed: () {
                   setState(() {
                     _showSearch = !_showSearch;
@@ -136,47 +237,70 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
                   });
                 },
               ),
+
               // Copy Button
               IconButton(
                 icon: const Icon(Icons.copy_rounded, size: 18),
                 tooltip: 'Copy Note',
+                color: colors.mutedText,
                 onPressed: () => _copyToClipboard(context),
               ),
             ],
           ),
         ),
 
-        if (_showSearch)
-          Padding(
+        // Animated Search Field
+        AnimatedCrossFade(
+          crossFadeState: _showSearch ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          duration: const Duration(milliseconds: 200),
+          firstChild: const SizedBox.shrink(),
+          secondChild: Padding(
             padding: const EdgeInsets.only(bottom: 14),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search text...',
+                hintText: 'Filter keywords in this note...',
                 prefixIcon: const Icon(Icons.search, size: 18),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
+                        icon: const Icon(Icons.clear_rounded, size: 18),
                         onPressed: () {
                           _searchController.clear();
                           setState(() => _searchQuery = '');
                         },
                       )
                     : null,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: colors.border),
+                ),
               ),
               onChanged: (val) => setState(() => _searchQuery = val.trim().toLowerCase()),
             ),
           ),
+        ),
 
-        // Parsed Colorful Note Content
+        // Centered Constrained Reading Canvas
         Expanded(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: parsedBlocks.map((block) => _buildBlockWidget(block, context)).toList(),
+          child: Container(
+            decoration: BoxDecoration(
+              color: readerBg,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: colors.cardBorder),
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 780),
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: parsedBlocks.map((block) => _buildBlockWidget(block, context, readerText)).toList(),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -184,7 +308,7 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
     );
   }
 
-  Widget _buildBlockWidget(_NoteBlock block, BuildContext context) {
+  Widget _buildBlockWidget(_NoteBlock block, BuildContext context, Color readerText) {
     final scheme = Theme.of(context).colorScheme;
     final colors = context.appColors;
 
@@ -197,34 +321,71 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
       case _BlockType.header1:
       case _BlockType.header2:
       case _BlockType.header3:
+        final isH1 = block.type == _BlockType.header1;
+        final isH2 = block.type == _BlockType.header2;
         return Container(
           width: double.infinity,
-          margin: const EdgeInsets.only(top: 18, bottom: 10),
+          margin: EdgeInsets.only(top: isH1 ? 28 : (isH2 ? 22 : 16), bottom: 10),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                scheme.primary.withOpacity(0.18),
-                scheme.surface,
-              ],
-            ),
+            color: scheme.primary.withValues(alpha: isH1 ? 0.08 : 0.04),
             borderRadius: BorderRadius.circular(12),
             border: Border(
-              left: BorderSide(color: scheme.primary, width: 4),
+              left: BorderSide(color: scheme.primary, width: isH1 ? 4 : 3),
             ),
           ),
           child: Text(
             block.text,
-            style: TextStyle(
-              fontSize: block.type == _BlockType.header1
-                  ? _fontSize + 4
-                  : block.type == _BlockType.header2
-                      ? _fontSize + 2
-                      : _fontSize + 1,
-              fontWeight: FontWeight.bold,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: isH1 ? _fontSize + 5 : (isH2 ? _fontSize + 3 : _fontSize + 1),
+              fontWeight: FontWeight.w700,
               color: scheme.primary,
-              letterSpacing: 0.4,
+              letterSpacing: -0.2,
             ),
+          ),
+        );
+
+      case _BlockType.callout:
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: colors.primarySoft,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: scheme.primary.withValues(alpha: 0.25)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.lightbulb_outline_rounded, color: scheme.primary, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'KEY TAKEAWAY',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                        color: scheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    _buildRichText(block.text, context, readerText),
+                  ],
+                ),
+              ),
+            ],
           ),
         );
 
@@ -233,28 +394,28 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: scheme.secondaryContainer.withOpacity(0.3),
+            color: colors.surfaceAlt,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: scheme.secondary.withOpacity(0.2)),
+            border: Border.all(color: colors.border),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 '${block.key}: ',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: _fontSize - 1,
-                  color: scheme.secondary,
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w700,
+                  fontSize: _fontSize - 0.5,
+                  color: scheme.primary,
                 ),
               ),
               Flexible(
                 child: Text(
                   block.text,
-                  style: TextStyle(
-                    fontSize: _fontSize - 1,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: _fontSize - 0.5,
                     fontWeight: FontWeight.w500,
-                    color: scheme.onSurface,
+                    color: readerText,
                   ),
                 ),
               ),
@@ -264,72 +425,57 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
 
       case _BlockType.bullet:
         return Padding(
-          padding: const EdgeInsets.only(bottom: 8, left: 4),
+          padding: const EdgeInsets.only(bottom: 10, left: 4),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                margin: const EdgeInsets.only(top: 7, right: 10),
-                width: 7,
-                height: 7,
+                margin: const EdgeInsets.only(top: 8, right: 12),
+                width: 6,
+                height: 6,
                 decoration: BoxDecoration(
                   color: scheme.primary,
                   shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: scheme.primary.withOpacity(0.5),
-                      blurRadius: 4,
-                    )
-                  ],
                 ),
               ),
               Expanded(
-                child: _buildRichText(block.text, context),
+                child: _buildRichText(block.text, context, readerText),
               ),
             ],
           ),
         );
 
       case _BlockType.divider:
-        return Container(
-          margin: const EdgeInsets.symmetric(vertical: 14),
-          height: 2,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                scheme.primary.withOpacity(0.5),
-                scheme.secondary.withOpacity(0.5),
-                Colors.transparent,
-              ],
-            ),
-          ),
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Divider(color: colors.border, thickness: 1),
         );
 
       case _BlockType.codeBlock:
         return Container(
           width: double.infinity,
-          margin: const EdgeInsets.symmetric(vertical: 10),
-          padding: const EdgeInsets.all(14),
+          margin: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: colors.surfaceAlt,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: scheme.primary.withOpacity(0.3)),
+            border: Border.all(color: colors.border),
           ),
           child: Stack(
             children: [
-              Text(
+              SelectableText(
                 block.text,
-                style: TextStyle(
-                  fontFamily: 'monospace',
+                style: GoogleFonts.firaCode(
                   fontSize: _fontSize - 1,
                   color: scheme.primary,
-                  height: 1.5,
+                  height: 1.55,
                 ),
               ),
               Positioned(
                 right: 0,
                 top: 0,
                 child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: block.text));
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -339,10 +485,11 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: scheme.surface,
+                      color: colors.surface,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: colors.border),
                     ),
-                    child: Icon(Icons.copy, size: 14, color: scheme.onSurface),
+                    child: Icon(Icons.copy_rounded, size: 14, color: colors.mutedText),
                   ),
                 ),
               ),
@@ -352,13 +499,13 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
 
       case _BlockType.paragraph:
         return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: _buildRichText(block.text, context),
+          padding: const EdgeInsets.only(bottom: 14),
+          child: _buildRichText(block.text, context, readerText),
         );
     }
   }
 
-  Widget _buildRichText(String text, BuildContext context) {
+  Widget _buildRichText(String text, BuildContext context, Color readerText) {
     final scheme = Theme.of(context).colorScheme;
     final colors = context.appColors;
 
@@ -366,15 +513,15 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
     final regex = RegExp(r'(\*\*(.*?)\*\*|`(.*?)`)');
     final matches = regex.allMatches(text);
 
+    final baseStyle = GoogleFonts.plusJakartaSans(
+      fontSize: _fontSize,
+      height: 1.68,
+      letterSpacing: 0.15,
+      color: readerText.withValues(alpha: 0.92),
+    );
+
     if (matches.isEmpty) {
-      return Text(
-        text,
-        style: TextStyle(
-          fontSize: _fontSize,
-          height: 1.65,
-          color: scheme.onSurface.withOpacity(0.9),
-        ),
-      );
+      return Text(text, style: baseStyle);
     }
 
     List<InlineSpan> spans = [];
@@ -385,11 +532,7 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
         spans.add(
           TextSpan(
             text: text.substring(lastMatchEnd, match.start),
-            style: TextStyle(
-              fontSize: _fontSize,
-              height: 1.65,
-              color: scheme.onSurface.withOpacity(0.9),
-            ),
+            style: baseStyle,
           ),
         );
       }
@@ -401,9 +544,8 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
         spans.add(
           TextSpan(
             text: boldContent,
-            style: TextStyle(
-              fontSize: _fontSize,
-              fontWeight: FontWeight.bold,
+            style: baseStyle.copyWith(
+              fontWeight: FontWeight.w700,
               color: scheme.primary,
             ),
           ),
@@ -420,14 +562,13 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
               decoration: BoxDecoration(
                 color: colors.surfaceAlt,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: scheme.primary.withOpacity(0.3)),
+                border: Border.all(color: colors.border),
               ),
               child: Text(
                 codeContent,
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: _fontSize - 1,
-                  fontWeight: FontWeight.bold,
+                style: GoogleFonts.firaCode(
+                  fontSize: _fontSize - 1.5,
+                  fontWeight: FontWeight.w600,
                   color: scheme.primary,
                 ),
               ),
@@ -443,18 +584,12 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
       spans.add(
         TextSpan(
           text: text.substring(lastMatchEnd),
-          style: TextStyle(
-            fontSize: _fontSize,
-            height: 1.65,
-            color: scheme.onSurface.withOpacity(0.9),
-          ),
+          style: baseStyle,
         ),
       );
     }
 
-    return RichText(
-      text: TextSpan(children: spans),
-    );
+    return RichText(text: TextSpan(children: spans));
   }
 
   List<_NoteBlock> _parseMarkdownToBlocks(String rawText) {
@@ -501,6 +636,15 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
         final title = trimmed.substring(4).trim();
         blocks.add(_NoteBlock(type: _BlockType.header3, text: title));
       }
+      // Callout quotes `> ` or takeaway emojis
+      else if (trimmed.startsWith('> ') ||
+          trimmed.startsWith('💡') ||
+          trimmed.toLowerCase().startsWith('key takeaway:') ||
+          trimmed.toLowerCase().startsWith('summary:')) {
+        String cleanText = trimmed;
+        if (cleanText.startsWith('> ')) cleanText = cleanText.substring(2).trim();
+        blocks.add(_NoteBlock(type: _BlockType.callout, text: cleanText));
+      }
       // Key-Value pair e.g. **Date:** October 26, 2023
       else if (RegExp(r'^\*\*(.*?)\*\*:\s*(.*)').hasMatch(trimmed)) {
         final match = RegExp(r'^\*\*(.*?)\*\*:\s*(.*)').firstMatch(trimmed);
@@ -531,7 +675,7 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
   }
 }
 
-enum _BlockType { header1, header2, header3, keyValue, bullet, divider, codeBlock, paragraph }
+enum _BlockType { header1, header2, header3, callout, keyValue, bullet, divider, codeBlock, paragraph }
 
 class _NoteBlock {
   final _BlockType type;

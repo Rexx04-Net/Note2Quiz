@@ -29,10 +29,51 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>frontend</title>
+  <title>Note2Quiz</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #080B11;
+      color: #FFFFFF;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(0, 98, 254, 0.18);
+      border-radius: 50%;
+      border-top-color: #0062FE;
+      animation: spin 0.9s ease-in-out infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .brand-text {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 2.5px;
+      color: #94A3B8;
+    }
+  </style>
 </head>
 <body>
+  <div class="loading-container">
+    <div class="spinner"></div>
+    <div class="brand-text">NOTE2QUIZ</div>
+  </div>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

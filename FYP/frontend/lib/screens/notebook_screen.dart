@@ -37,12 +37,55 @@ class _NotebookScreenState extends State<NotebookScreen> {
   String _selectedDifficulty = 'Standard';
   bool _isStreaming = false;
   int _mistakesCount = 0;
+  int _mobileTabIndex = 1; // 0: Sources, 1: Studio, 2: AI Actions
+  Map<String, dynamic>? _automationData;
+  Map<String, dynamic>? _automationStats;
+  bool _hasAutomation = false;
 
   @override
   void initState() {
     super.initState();
     _loadSources();
     _fetchMistakesCount();
+    _fetchAutomationStatus();
+  }
+
+  Future<void> _fetchAutomationStatus() async {
+    final userEmail = FirebaseAuth.instance.currentUser?.email ??
+        (widget.notebook['user_email'] ?? '').toString();
+    final courseTitle = (widget.notebook['title'] ?? '').toString();
+    try {
+      final uri = Uri.parse(
+        '$baseUrl/api/automations/${widget.notebook['id']}/history?user_email=${Uri.encodeComponent(userEmail)}&course_name=${Uri.encodeComponent(courseTitle)}',
+      );
+      final resp = await http.get(uri);
+      if (resp.statusCode == 200) {
+        final data = json.decode(resp.body);
+        if (data['success'] == true && data['automation'] != null) {
+          if (mounted) {
+            setState(() {
+              _automationData = data['automation'];
+              _automationStats = data['stats'];
+              _hasAutomation = true;
+            });
+          }
+          return;
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _automationData = null;
+          _automationStats = null;
+          _hasAutomation = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _hasAutomation = false;
+        });
+      }
+    }
   }
 
   Future<void> _fetchMistakesCount() async {
@@ -403,6 +446,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
         _isLoading = false;
         _isStreaming = true;
         _selectedTool = toolType;
+        _mobileTabIndex = 1;
         _generatedData = '';
       });
 
@@ -492,6 +536,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
       _isLoading = true;
       _isStreaming = false;
       _selectedTool = toolType;
+      _mobileTabIndex = 1;
       _generatedData = null;
     });
 
@@ -794,121 +839,338 @@ class _NotebookScreenState extends State<NotebookScreen> {
     final colors = context.appColors;
     final scheme = Theme.of(context).colorScheme;
     final settings = AppSettingsScope.of(context);
+    final isMobile = MediaQuery.of(context).size.width < 900;
 
     return Scaffold(
       backgroundColor: colors.background,
       appBar: AppBar(
-        titleSpacing: 20,
+        titleSpacing: isMobile ? 12 : 20,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.notebook['title'] ?? 'Notebook'),
-            const SizedBox(height: 4),
             Text(
-              '${_sources.length} source${_sources.length == 1 ? '' : 's'} | Output: ${settings.outputLanguage}',
+              widget.notebook['title'] ?? 'Notebook',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${_sources.length} source${_sources.length == 1 ? '' : 's'} · ${settings.outputLanguage}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: colors.mutedText,
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.normal,
               ),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Automation History & Progress',
-            onPressed: () {
-              final userEmail = FirebaseAuth.instance.currentUser?.email ?? 
-                  (widget.notebook['user_email'] ?? '').toString();
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => AutomationHistoryScreen(
-                    notebookId: (widget.notebook['id'] ?? 'nb_default').toString(),
-                    courseName: (widget.notebook['title'] ?? 'Course').toString(),
-                    userEmail: userEmail,
+        actions: isMobile
+            ? [
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedDifficulty,
+                    dropdownColor: colors.surfaceAlt,
+                    style: TextStyle(color: scheme.onSurface, fontSize: 13),
+                    items: const [
+                      DropdownMenuItem(value: 'Easy', child: Text('Easy')),
+                      DropdownMenuItem(value: 'Standard', child: Text('Standard')),
+                      DropdownMenuItem(value: 'Hard', child: Text('Hard')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => _selectedDifficulty = value);
+                    },
                   ),
                 ),
-              );
-            },
-            icon: const Icon(Icons.history_edu, color: Colors.orangeAccent),
-          ),
-          IconButton(
-            tooltip: 'Syllabus & Timetable Engine',
-            onPressed: () {
-              final userEmail = FirebaseAuth.instance.currentUser?.email ?? 
-                  (widget.notebook['user_email'] ?? '').toString();
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => AutomationSetupScreen(
-                    notebookId: (widget.notebook['id'] ?? 'nb_default').toString(),
-                    initialCourseName: (widget.notebook['title'] ?? 'Course').toString(),
-                    userEmail: userEmail,
+                if (_hasAutomation) ...[
+                  Tooltip(
+                    message: 'Course Automation Progress',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () async {
+                        final userEmail = FirebaseAuth.instance.currentUser?.email ?? 
+                            (widget.notebook['user_email'] ?? '').toString();
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => AutomationHistoryScreen(
+                              notebookId: (widget.notebook['id'] ?? 'nb_default').toString(),
+                              courseName: (_automationData?['course_name'] ?? widget.notebook['title'] ?? 'Course').toString(),
+                              userEmail: userEmail,
+                            ),
+                          ),
+                        );
+                        _fetchAutomationStatus();
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFF10B981).withOpacity(0.4)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.bolt_rounded, color: Color(0xFF10B981), size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${_automationStats?['completed_weeks_count'] ?? 0}/${_automationStats?['total_weeks'] ?? 14}',
+                              style: const TextStyle(
+                                color: Color(0xFF34D399),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              );
-            },
-            icon: Icon(Icons.auto_awesome, color: scheme.primary),
-          ),
-          IconButton(
-            tooltip: 'Settings',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => SettingsScreen(
-                    userEmail: (widget.notebook['user_email'] ?? 'guest').toString(),
-                    settingsController: AppSettingsScope.of(context),
-                  ),
-                ),
-              );
-            },
-            icon: Icon(Icons.settings_outlined, color: colors.mutedText),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.only(right: 20),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedDifficulty,
-                dropdownColor: colors.surfaceAlt,
-                style: TextStyle(color: scheme.onSurface),
-                items: const [
-                  DropdownMenuItem(value: 'Easy', child: Text('Easy')),
-                  DropdownMenuItem(value: 'Standard', child: Text('Standard')),
-                  DropdownMenuItem(value: 'Hard', child: Text('Hard')),
+                  const SizedBox(width: 4),
                 ],
-                onChanged: (value) {
-                  if (value != null) setState(() => _selectedDifficulty = value);
-                },
-              ),
-            ),
-          ),
-        ],
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert_rounded, color: colors.mutedText),
+                  color: colors.surfaceAlt,
+                  onSelected: (value) async {
+                    final userEmail = FirebaseAuth.instance.currentUser?.email ?? 
+                        (widget.notebook['user_email'] ?? '').toString();
+                    if (value == 'history') {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AutomationHistoryScreen(
+                            notebookId: (widget.notebook['id'] ?? 'nb_default').toString(),
+                            courseName: (_automationData?['course_name'] ?? widget.notebook['title'] ?? 'Course').toString(),
+                            userEmail: userEmail,
+                          ),
+                        ),
+                      );
+                      _fetchAutomationStatus();
+                    } else if (value == 'automation') {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AutomationSetupScreen(
+                            notebookId: (widget.notebook['id'] ?? 'nb_default').toString(),
+                            initialCourseName: (widget.notebook['title'] ?? 'Course').toString(),
+                            userEmail: userEmail,
+                          ),
+                        ),
+                      );
+                      _fetchAutomationStatus();
+                    } else if (value == 'settings') {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SettingsScreen(
+                            userEmail: (widget.notebook['user_email'] ?? 'guest').toString(),
+                            settingsController: AppSettingsScope.of(context),
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem(
+                      value: 'automation',
+                      child: Row(
+                        children: [
+                          Icon(Icons.auto_awesome, color: Colors.indigoAccent, size: 18),
+                          SizedBox(width: 10),
+                          Text('Syllabus Engine'),
+                        ],
+                      ),
+                    ),
+                    if (_hasAutomation)
+                      PopupMenuItem(
+                        value: 'history',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.bolt_rounded, color: Color(0xFF10B981), size: 18),
+                            const SizedBox(width: 10),
+                            Text('Progress (${((_automationStats?['progress_percentage'] ?? 0) as num).round()}%)'),
+                          ],
+                        ),
+                      ),
+                    const PopupMenuItem(
+                      value: 'settings',
+                      child: Row(
+                        children: [
+                          Icon(Icons.settings_outlined, size: 18),
+                          SizedBox(width: 10),
+                          Text('Settings'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 8),
+              ]
+            : [
+                if (_hasAutomation) ...[
+                  Tooltip(
+                    message: 'Course Automation Progress · Click to review weekly schedule and quiz scores',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () async {
+                        final userEmail = FirebaseAuth.instance.currentUser?.email ?? 
+                            (widget.notebook['user_email'] ?? '').toString();
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => AutomationHistoryScreen(
+                              notebookId: (widget.notebook['id'] ?? 'nb_default').toString(),
+                              courseName: (_automationData?['course_name'] ?? widget.notebook['title'] ?? 'Course').toString(),
+                              userEmail: userEmail,
+                            ),
+                          ),
+                        );
+                        _fetchAutomationStatus();
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFF10B981).withOpacity(0.4)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.bolt_rounded, color: Color(0xFF10B981), size: 16),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Progress: ${_automationStats?['completed_weeks_count'] ?? 0}/${_automationStats?['total_weeks'] ?? 14} Wks (${((_automationStats?['progress_percentage'] ?? 0) as num).round()}%)',
+                              style: const TextStyle(
+                                color: Color(0xFF34D399),
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                IconButton(
+                  tooltip: 'Syllabus & Timetable Engine',
+                  onPressed: () async {
+                    final userEmail = FirebaseAuth.instance.currentUser?.email ?? 
+                        (widget.notebook['user_email'] ?? '').toString();
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AutomationSetupScreen(
+                          notebookId: (widget.notebook['id'] ?? 'nb_default').toString(),
+                          initialCourseName: (widget.notebook['title'] ?? 'Course').toString(),
+                          userEmail: userEmail,
+                        ),
+                      ),
+                    );
+                    _fetchAutomationStatus();
+                  },
+                  icon: Icon(Icons.auto_awesome, color: scheme.primary),
+                ),
+                IconButton(
+                  tooltip: 'Settings',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SettingsScreen(
+                          userEmail: (widget.notebook['user_email'] ?? 'guest').toString(),
+                          settingsController: AppSettingsScope.of(context),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: Icon(Icons.settings_outlined, color: colors.mutedText),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 20),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedDifficulty,
+                      dropdownColor: colors.surfaceAlt,
+                      style: TextStyle(color: scheme.onSurface),
+                      items: const [
+                        DropdownMenuItem(value: 'Easy', child: Text('Easy')),
+                        DropdownMenuItem(value: 'Standard', child: Text('Standard')),
+                        DropdownMenuItem(value: 'Hard', child: Text('Hard')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) setState(() => _selectedDifficulty = value);
+                      },
+                    ),
+                  ),
+                ),
+              ],
       ),
+      bottomNavigationBar: isMobile
+          ? NavigationBar(
+              selectedIndex: _mobileTabIndex,
+              onDestinationSelected: (idx) => setState(() => _mobileTabIndex = idx),
+              backgroundColor: colors.surface,
+              elevation: 0,
+              indicatorColor: colors.primarySoft,
+              destinations: [
+                NavigationDestination(
+                  icon: const Icon(Icons.folder_open_outlined),
+                  selectedIcon: Icon(Icons.folder_rounded, color: scheme.primary),
+                  label: 'Sources (${_sources.length})',
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.auto_stories_outlined),
+                  selectedIcon: Icon(Icons.auto_stories_rounded, color: scheme.primary),
+                  label: 'Studio',
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.bolt_outlined),
+                  selectedIcon: Icon(Icons.bolt_rounded, color: scheme.primary),
+                  label: 'AI Actions',
+                ),
+              ],
+            )
+          : null,
       body: Stack(
         children: [
-          Row(
-            children: [
-              _buildSourcesRail(),
-              Expanded(child: _buildMainContent()),
-              _buildActionRail(),
-            ],
-          ),
+          isMobile
+              ? IndexedStack(
+                  index: _mobileTabIndex,
+                  children: [
+                    _buildSourcesRail(isMobile: true),
+                    _buildMainContent(isMobile: true),
+                    _buildActionRail(isMobile: true),
+                  ],
+                )
+              : Row(
+                  children: [
+                    _buildSourcesRail(isMobile: false),
+                    Expanded(child: _buildMainContent(isMobile: false)),
+                    _buildActionRail(isMobile: false),
+                  ],
+                ),
           if (_isLoading) const LoadingOverlay(),
         ],
       ),
     );
   }
 
-  Widget _buildSourcesRail() {
+  Widget _buildSourcesRail({bool isMobile = false}) {
     final colors = context.appColors;
     final scheme = Theme.of(context).colorScheme;
 
     return Container(
-      width: 300,
-      margin: const EdgeInsets.fromLTRB(20, 12, 12, 20),
+      width: isMobile ? double.infinity : 300,
+      margin: isMobile
+          ? const EdgeInsets.fromLTRB(16, 12, 16, 16)
+          : const EdgeInsets.fromLTRB(20, 12, 12, 20),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: colors.surface,
@@ -1645,14 +1907,16 @@ class _NotebookScreenState extends State<NotebookScreen> {
     );
   }
 
-  Widget _buildActionRail() {
+  Widget _buildActionRail({bool isMobile = false}) {
     final colors = context.appColors;
     final scheme = Theme.of(context).colorScheme;
     final settings = AppSettingsScope.of(context);
 
     return Container(
-      width: 300,
-      margin: const EdgeInsets.fromLTRB(12, 12, 20, 20),
+      width: isMobile ? double.infinity : 300,
+      margin: isMobile
+          ? const EdgeInsets.fromLTRB(16, 12, 16, 16)
+          : const EdgeInsets.fromLTRB(12, 12, 20, 20),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: colors.surface,
@@ -1784,11 +2048,13 @@ class _NotebookScreenState extends State<NotebookScreen> {
     );
   }
 
-  Widget _buildMainContent() {
+  Widget _buildMainContent({bool isMobile = false}) {
     final colors = context.appColors;
 
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 12),
+      margin: isMobile
+          ? const EdgeInsets.fromLTRB(16, 12, 16, 16)
+          : const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(24),

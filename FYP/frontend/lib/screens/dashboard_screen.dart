@@ -9,6 +9,8 @@ import 'student_lobby_screen.dart';
 import 'study_plan_screen.dart';
 import 'timetable_scanner_screen.dart';
 import 'analytics_screen.dart';
+import 'mistakes_bank_screen.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../state/app_settings_controller.dart';
 import '../theme/app_theme.dart';
 import '../utils/course_colors.dart';
@@ -24,6 +26,8 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   List<dynamic> _notebooks = [];
   List<dynamic> _automations = [];
+  int _mistakesCount = 0;
+  int _roadmapsCount = 0;
   bool _isLoading = true;
   String _userEmail = 'guest';
 
@@ -55,6 +59,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final autoData = jsonDecode(autoResp.body);
         setState(() => _automations = autoData['automations'] ?? []);
       }
+
+      // Fetch study plans / AI roadmaps count
+      try {
+        final planResp = await http.get(
+          Uri.parse('$baseUrl/get-study-plan-history?email=${Uri.encodeComponent(_userEmail)}'),
+        );
+        if (planResp.statusCode == 200) {
+          final planData = jsonDecode(planResp.body);
+          final historyList = planData['history'] as List<dynamic>? ?? [];
+          setState(() => _roadmapsCount = historyList.length);
+        }
+      } catch (_) {}
+
+      // Fetch mistakes bank count
+      try {
+        final misResp = await http.get(
+          Uri.parse('$baseUrl/api/mistakes-bank/all?user_email=${Uri.encodeComponent(_userEmail)}'),
+        );
+        if (misResp.statusCode == 200) {
+          final misData = jsonDecode(misResp.body);
+          setState(() => _mistakesCount = (misData['total_mistakes'] ?? 0) as int);
+        }
+      } catch (_) {}
     } catch (e) {
       debugPrint('Error fetching notebooks: $e');
     } finally {
@@ -189,8 +216,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
               child: Container(
-                width: 580,
                 constraints: BoxConstraints(
+                  maxWidth: 580,
                   maxHeight: MediaQuery.of(context).size.height * 0.85,
                 ),
                 padding: const EdgeInsets.all(24),
@@ -1091,131 +1118,237 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 24),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildStatCard(
+                            const SizedBox(height: 20),
+                            // Quick Stats Row (Responsive)
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final isNarrow = constraints.maxWidth < 680;
+                                final cards = [
+                                  _buildStatCard(
                                     icon: Icons.menu_book_rounded,
                                     title: 'Notebooks',
                                     value: '${_notebooks.length}',
-                                    subtitle: 'Your study spaces',
+                                    subtitle: 'Study spaces',
                                   ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(22),
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(20),
                                     onTap: _showAllAutomationsDialog,
                                     child: _buildStatCard(
-                                      icon: Icons.alarm_on,
+                                      icon: Icons.alarm_on_rounded,
                                       title: 'Automations',
                                       value: '${_automations.length} Active',
-                                      subtitle: 'Track course schedules',
+                                      subtitle: 'Course triggers',
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: _buildStatCard(
-                                    icon: Icons.groups_rounded,
-                                    title: 'Live mode',
-                                    value: 'Ready',
-                                    subtitle: 'Join or host quiz battles',
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(20),
+                                    onTap: () async {
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => MistakesBankScreen(userEmail: _userEmail),
+                                        ),
+                                      );
+                                      _fetchNotebooks();
+                                    },
+                                    child: _buildStatCard(
+                                      icon: Icons.psychology_rounded,
+                                      title: 'Mistakes Bank',
+                                      value: '$_mistakesCount Qs',
+                                      subtitle: 'Remediation drill',
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ];
+
+                                if (isNarrow) {
+                                  return SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    physics: const BouncingScrollPhysics(),
+                                    child: Row(
+                                      children: cards.map((c) => Padding(
+                                        padding: const EdgeInsets.only(right: 12),
+                                        child: SizedBox(width: 160, child: c),
+                                      )).toList(),
+                                    ),
+                                  );
+                                }
+
+                                return Row(
+                                  children: [
+                                    Expanded(child: cards[0]),
+                                    const SizedBox(width: 14),
+                                    Expanded(child: cards[1]),
+                                    const SizedBox(width: 14),
+                                    Expanded(child: cards[2]),
+                                  ],
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 24),
+
+                            // Study Hub & Quick Actions
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: colors.surface,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: colors.cardBorder),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.hub_rounded, size: 18, color: scheme.primary),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Learning Assistant Hub',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: scheme.onSurface,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Wrap(
+                                    spacing: 10,
+                                    runSpacing: 10,
+                                    children: [
+                                      // 1. Timetable
+                                      OutlinedButton.icon(
+                                        onPressed: () async {
+                                          await Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => TimetableScannerScreen(userEmail: _userEmail),
+                                            ),
+                                          );
+                                          _fetchNotebooks();
+                                        },
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                          side: BorderSide(color: colors.border),
+                                        ),
+                                        icon: Icon(Icons.calendar_month_rounded, color: scheme.primary, size: 18),
+                                        label: const Text('Timetable & ICS', style: TextStyle(fontWeight: FontWeight.w600)),
+                                      ),
+                                      // 2. Analytics
+                                      OutlinedButton.icon(
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => AnalyticsScreen(userEmail: _userEmail),
+                                            ),
+                                          );
+                                        },
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                          side: BorderSide(color: colors.border),
+                                        ),
+                                        icon: const Icon(Icons.insights_rounded, color: Colors.cyan, size: 18),
+                                        label: const Text('Analytics & Radar', style: TextStyle(fontWeight: FontWeight.w600)),
+                                      ),
+                                      // 3. Mistakes Bank
+                                      OutlinedButton.icon(
+                                        onPressed: () async {
+                                          await Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => MistakesBankScreen(userEmail: _userEmail),
+                                            ),
+                                          );
+                                          _fetchNotebooks();
+                                        },
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                          side: BorderSide(color: colors.border),
+                                        ),
+                                        icon: Icon(Icons.psychology_alt_rounded, color: colors.warning, size: 18),
+                                        label: Text('Mistakes Bank ($_mistakesCount)', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                      ),
+                                      // 4. AI Roadmaps
+                                      OutlinedButton.icon(
+                                        onPressed: () async {
+                                          await _showMultiSelectRoadmapDialog();
+                                          _fetchNotebooks();
+                                        },
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                          side: BorderSide(color: colors.border),
+                                        ),
+                                        icon: const Icon(Icons.alt_route_rounded, color: Colors.purpleAccent, size: 18),
+                                        label: Text('AI Roadmaps ($_roadmapsCount)', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                      ),
+                                      // 5. Automations
+                                      OutlinedButton.icon(
+                                        onPressed: () async {
+                                          await _showAllAutomationsDialog();
+                                          _fetchNotebooks();
+                                        },
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                          side: BorderSide(color: colors.border),
+                                        ),
+                                        icon: Icon(Icons.alarm_on_rounded, color: colors.warning, size: 18),
+                                        label: Text('Automations (${_automations.length})', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 28),
+
+                            // Notebooks Header
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  'My notebooks',
-                                  style: TextStyle(
-                                    color: scheme.onSurface,
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
                                 Row(
                                   children: [
-                                    OutlinedButton.icon(
-                                      onPressed: () async {
-                                        await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => TimetableScannerScreen(userEmail: _userEmail),
-                                          ),
-                                        );
-                                        _fetchNotebooks();
-                                      },
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                        side: const BorderSide(color: Color(0xFF3451FF)),
-                                      ),
-                                      icon: const Icon(Icons.document_scanner_rounded, color: Color(0xFF3451FF), size: 18),
-                                      label: const Text(
-                                        'Smart Timetable',
-                                        style: TextStyle(fontWeight: FontWeight.bold),
+                                    Text(
+                                      'My Notebooks',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: scheme.onSurface,
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    OutlinedButton.icon(
-                                      onPressed: _showAllAutomationsDialog,
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                        side: const BorderSide(color: Colors.orangeAccent),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: colors.primarySoft,
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
-                                      icon: const Icon(Icons.alarm_on, color: Colors.orangeAccent, size: 18),
-                                      label: Text(
-                                        'Automations & Progress (${_automations.length})',
-                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                      child: Text(
+                                        '${_notebooks.length}',
+                                        style: TextStyle(
+                                          color: scheme.primary,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    OutlinedButton.icon(
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => AnalyticsScreen(userEmail: _userEmail),
-                                          ),
-                                        );
-                                      },
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                        side: const BorderSide(color: Colors.cyanAccent),
-                                      ),
-                                      icon: const Icon(Icons.insights_rounded, color: Colors.cyanAccent, size: 18),
-                                      label: const Text('Analytics & Radar', style: TextStyle(fontWeight: FontWeight.bold)),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    OutlinedButton.icon(
-                                      onPressed: _showMultiSelectRoadmapDialog,
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                        side: BorderSide(color: scheme.primary),
-                                      ),
-                                      icon: const Icon(Icons.alt_route, color: Colors.purpleAccent, size: 18),
-                                      label: const Text('AI Roadmap', style: TextStyle(fontWeight: FontWeight.bold)),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    FilledButton.icon(
-                                      onPressed: _createNotebook,
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor: scheme.primary,
-                                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                      ),
-                                      icon: const Icon(Icons.add),
-                                      label: const Text('New notebook'),
                                     ),
                                   ],
+                                ),
+                                FilledButton.icon(
+                                  onPressed: _createNotebook,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: scheme.primary,
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  ),
+                                  icon: const Icon(Icons.add_rounded, size: 18),
+                                  label: const Text('New Notebook', style: TextStyle(fontWeight: FontWeight.bold)),
                                 ),
                               ],
                             ),
@@ -1235,8 +1368,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                         sliver: SliverGrid(
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 380,
                             mainAxisSpacing: 16,
                             crossAxisSpacing: 16,
                             childAspectRatio: 1.15,

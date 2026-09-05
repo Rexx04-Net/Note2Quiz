@@ -7,7 +7,11 @@ def send_revision_email(user_email, course_name, week_number, topic_title, noteb
     if not config.SMTP_USERNAME or not config.SMTP_PASSWORD:
         raise ValueError("SMTP credentials not configured (SMTP_USERNAME and SMTP_PASSWORD required).")
 
-    web_url = f"http://127.0.0.1:5000/revision?notebook_id={notebook_id}&week_number={week_number}&user_email={user_email}"
+    if hasattr(config, "get_server_public_url"):
+        base_server = config.get_server_public_url()
+    else:
+        base_server = getattr(config, "SERVER_PUBLIC_URL", "http://127.0.0.1:5000").rstrip("/")
+    web_url = f"{base_server}/revision?notebook_id={notebook_id}&week_number={week_number}&user_email={user_email}"
     app_scheme_url = f"note2quiz://revision?notebook_id={notebook_id}&week_number={week_number}"
 
     if is_evening_reminder:

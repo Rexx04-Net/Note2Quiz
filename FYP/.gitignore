@@ -5,6 +5,10 @@ api_secrets.py
 __pycache__/
 *.pyc
 venv/
+.venv/
+.vscode/
+*.log
+flutter_*.log
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
