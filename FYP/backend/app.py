@@ -101,20 +101,20 @@ def _save_json_file(filename, data):
 # --- DATABASE CONNECTION ---
 USING_MONGO = False
 try:
-    client = MongoClient("mongodb://localhost:27017/", serverSelectionTimeoutMS=2000)
-    db = client["note2quiz_db"]
+    import config
+    client = MongoClient(config.MONGODB_URI, serverSelectionTimeoutMS=10000)
+    client.server_info()
+    db = client[config.DB_NAME]
     notebooks_col = db["notebooks"]
     feedback_col = db["feedback"]
     users_col = db["users"]  
     logs_col = db["activity_logs"] # Dedicated folder for tracking actions
     study_plans_col = db["study_plans"] # Active AI Study Roadmap collection
     ai_cache_col = db["ai_cache"] # Semantic content fingerprint caching
-    
-    client.server_info()
-    print("✅ Connected to MongoDB")
+    print(f"✅ Connected to MongoDB: {config.DB_NAME}")
     USING_MONGO = True
-except:
-    print("⚠️ MongoDB not found. Using persistent local JSON file storage.")
+except Exception as e:
+    print(f"⚠️ MongoDB connection failed ({e}). Using persistent local JSON file storage.")
     memory_notebooks = _load_json_file("notebooks.json", [])
     memory_feedback = _load_json_file("feedback.json", [])
     memory_study_plans = _load_json_file("study_plans.json", [])
