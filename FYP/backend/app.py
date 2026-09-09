@@ -1,6 +1,10 @@
 import os
 import sys
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
 # Configure UTF-8 encoding on Windows to avoid UnicodeEncodeError with emojis
 if sys.platform == "win32":
     try:
@@ -40,6 +44,14 @@ except:
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+@app.route('/', methods=['GET'])
+def root_index():
+    return jsonify({"status": "online", "service": "Note2Quiz Backend API", "version": "1.0.0"}), 200
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({"status": "healthy"}), 200
 
 # Register Automation & Timetable Blueprints
 try:

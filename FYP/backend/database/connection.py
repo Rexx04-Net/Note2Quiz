@@ -1,5 +1,10 @@
 import os
 import sys
+
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
 import json
 from pymongo import MongoClient
 import config
@@ -74,7 +79,7 @@ def get_db():
         return _db, USING_MONGO
 
     try:
-        _client = MongoClient(config.MONGODB_URI, serverSelectionTimeoutMS=2000)
+        _client = MongoClient(config.MONGODB_URI, serverSelectionTimeoutMS=10000)
         _client.server_info()
         _db = _client[config.DB_NAME]
         USING_MONGO = True
