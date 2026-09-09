@@ -120,7 +120,7 @@ class _AutomationHistoryScreenState extends State<AutomationHistoryScreen> {
         ];
       }
 
-      await Navigator.push(
+      final result = await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => QuizScreen(
@@ -131,6 +131,22 @@ class _AutomationHistoryScreenState extends State<AutomationHistoryScreen> {
           ),
         ),
       );
+
+      if (result != null && result is Map) {
+        try {
+          await http.post(
+            Uri.parse('$baseUrl/api/automations/quiz-completed'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'notebook_id': widget.notebookId,
+              'week_number': weekNumber,
+              'user_email': widget.userEmail,
+              'score': result['correct_answers'] ?? 0,
+              'total_questions': result['total_questions'] ?? 2,
+            }),
+          );
+        } catch (_) {}
+      }
 
       // Refresh history upon return if quiz was completed
       _fetchAutomationHistory();
@@ -257,6 +273,44 @@ class _AutomationHistoryScreenState extends State<AutomationHistoryScreen> {
     }
   }
 
+  Future<void> _triggerDemoAlertNow() async {
+    setState(() => _isLoading = true);
+    try {
+      final uri = Uri.parse('$baseUrl/api/automations/${widget.notebookId}/trigger-now?user_email=${Uri.encodeComponent(widget.userEmail)}');
+      final response = await http.post(uri);
+      final data = json.decode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("⚡ ${data['message'] ?? 'Revision alert triggered and email sent!'}"),
+            backgroundColor: Colors.purpleAccent,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        _fetchAutomationHistory();
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error: ${data['error'] ?? 'Failed to trigger alert'}"),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Failed to trigger alert: $e"),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
@@ -279,6 +333,16 @@ class _AutomationHistoryScreenState extends State<AutomationHistoryScreen> {
           ],
         ),
         actions: [
+          if (_automationData != null)
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.purpleAccent,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+              icon: const Icon(Icons.bolt, size: 18),
+              label: const Text("⚡ Trigger Alert Now", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              onPressed: _triggerDemoAlertNow,
+            ),
           IconButton(
             tooltip: "Refresh History",
             icon: const Icon(Icons.refresh),
@@ -585,7 +649,7 @@ class _AutomationHistoryScreenState extends State<AutomationHistoryScreen> {
             runSpacing: 8,
             children: [
               _buildConfigChip(Icons.calendar_today, "$day $startTime - $endTime", colors),
-              _buildConfigChip(Icons.notifications_active, "1st Alert: At Class End ($endTime)", colors),
+              _buildConfigChip(Icons.notifications_active, "1st Alert: $primaryReminder", colors),
               if (enableEve) _buildConfigChip(Icons.nightlight_round, "2nd Evening Alert: $eveReminder", colors),
               _buildConfigChip(Icons.play_circle_outline, "Start: $startDate", colors),
               if (hasBreak) _buildConfigChip(Icons.beach_access, "Mid-Term Break (W6)", colors),

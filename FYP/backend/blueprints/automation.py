@@ -370,50 +370,94 @@ def delete_automation(notebook_id):
 @automation_bp.route("/api/automations/<notebook_id>/trigger-now", methods=["POST"])
 def trigger_automation_now(notebook_id):
     """
-    Forces an immediate trigger of the next pending revision reminder for live presentation demo.
+    Forces an immediate trigger and email dispatch of the next revision reminder for live presentation demo.
     """
+    user_email = request.args.get("user_email", "").strip() or ((request.get_json(silent=True) or {}).get("user_email", "").strip())
     db, is_mongo = get_db()
     now_utc = datetime.datetime.now(datetime.timezone.utc)
-    found_item = False
-    
+
+    auto = None
     if is_mongo and db is not None:
-        automations_col = db["course_automations"]
-        auto = automations_col.find_one({"notebook_id": notebook_id})
+        query = {"notebook_id": notebook_id}
+        if user_email:
+            query["user_email"] = user_email
+        auto = db["course_automations"].find_one(query)
         if not auto:
-            return jsonify({"success": False, "error": "Automation not found"}), 404
-        
-        for idx, item in enumerate(auto.get("weekly_schedule", [])):
-            if item.get("status") == "PENDING":
-                past_time = now_utc - datetime.timedelta(seconds=5)
-                automations_col.update_one(
-                    {"_id": auto["_id"]},
-                    {"$set": {
-                        f"weekly_schedule.{idx}.primary_trigger_timestamp": past_time,
-                        f"weekly_schedule.{idx}.actual_trigger_timestamp": past_time,
-                        f"weekly_schedule.{idx}.revision_trigger_timestamp": past_time,
-                    }}
-                )
-                found_item = True
-                break
+            auto = db["course_automations"].find_one({"notebook_id": notebook_id})
     else:
-        for k, auto in memory_automations.items():
-            if auto.get("notebook_id") == notebook_id:
-                for idx, item in enumerate(auto.get("weekly_schedule", [])):
-                    if item.get("status") == "PENDING":
-                        past_time = now_utc - datetime.timedelta(seconds=5)
-                        item["primary_trigger_timestamp"] = past_time
-                        item["actual_trigger_timestamp"] = past_time
-                        item["revision_trigger_timestamp"] = past_time
-                        found_item = True
-                        save_memory_automations()
-                        break
+        for k, v in memory_automations.items():
+            if v.get("notebook_id") == notebook_id:
+                auto = v
+                break
 
-    if not found_item:
-        return jsonify({"success": False, "error": "No pending revision alerts found to trigger"}), 400
+    if not auto:
+        return jsonify({"success": False, "error": "Automation not found"}), 404
 
-    from jobs.notifier import check_and_send_due_notifications
-    check_and_send_due_notifications()
-    return jsonify({"success": True, "message": "Revision reminder triggered immediately!"}), 200
+    weekly_schedule = auto.get("weekly_schedule", [])
+    target_idx = None
+    target_item = None
+    for idx, item in enumerate(weekly_schedule):
+        if item.get("status") == "PENDING":
+            target_idx = idx
+            target_item = item
+            break
+    if target_item is None and weekly_schedule:
+        target_idx = 0
+        target_item = weekly_schedule[0]
+
+    if not target_item:
+        return jsonify({"success": False, "error": "No weekly schedule found"}), 400
+
+    course_name = auto.get("course_name", "Course")
+    target_email = auto.get("user_email") or user_email
+    week_num = target_item.get("week_number", 1)
+    topic_title = target_item.get("topic_title", f"Week {week_num} Topic")
+
+    from services.notification_service import send_revision_email
+    try:
+        send_revision_email(
+            user_email=target_email,
+            course_name=course_name,
+            week_number=week_num,
+            topic_title=topic_title,
+            notebook_id=notebook_id,
+            is_evening_reminder=False
+        )
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Failed to send email: {str(e)}"}), 500
+
+    past_time = now_utc - datetime.timedelta(seconds=5)
+    target_item["status"] = "REMINDER_SENT"
+    target_item["primary_trigger_timestamp"] = past_time
+    target_item["actual_trigger_timestamp"] = past_time
+    target_item["revision_trigger_timestamp"] = past_time
+    target_item["email_dispatched_at"] = now_utc
+    target_item["notification_sent_at"] = now_utc
+
+    stats = calculate_progress_stats(weekly_schedule, auto.get("total_weeks"))
+
+    if is_mongo and db is not None:
+        db["course_automations"].update_one(
+            {"_id": auto["_id"]},
+            {"$set": {
+                f"weekly_schedule.{target_idx}.status": "REMINDER_SENT",
+                f"weekly_schedule.{target_idx}.primary_trigger_timestamp": past_time,
+                f"weekly_schedule.{target_idx}.actual_trigger_timestamp": past_time,
+                f"weekly_schedule.{target_idx}.revision_trigger_timestamp": past_time,
+                f"weekly_schedule.{target_idx}.email_dispatched_at": now_utc,
+                f"weekly_schedule.{target_idx}.notification_sent_at": now_utc,
+                "next_scheduled_trigger": stats.get("next_scheduled_trigger"),
+                "updated_at": now_utc
+            }}
+        )
+    else:
+        auto["next_scheduled_trigger"] = stats.get("next_scheduled_trigger")
+        save_memory_automations()
+
+    return jsonify({
+        "success": True,
+        "message": f"Revision alert for Week {week_num} ({topic_title}) sent to {target_email}!"
+    }), 200
 
 @automation_bp.route("/api/automations/quiz-completed", methods=["POST"])
 def record_quiz_completed():

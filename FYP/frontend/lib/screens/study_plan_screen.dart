@@ -38,6 +38,12 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    super.dispose();
+  }
+
   Future<void> _fetchPlan() async {
     setState(() => _isLoading = true);
     try {
@@ -179,13 +185,23 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
         _toggleTaskStatus(taskId, false);
       }
       if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green.shade800,
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            showCloseIcon: true,
+            closeIconColor: Colors.white,
             content: Text('🎉 Mastery Achieved ($percentage% - $correct/$total)! Quiz marked as completed.'),
           ),
         );
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          }
+        });
       }
     } else {
       // Failed (< 80%) - Do NOT mark completed
@@ -193,18 +209,23 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
         _toggleTaskStatus(taskId, true); // uncheck if previously checked
       }
       if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.orange.shade900,
-            duration: const Duration(seconds: 4),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            showCloseIcon: true,
+            closeIconColor: Colors.white,
             content: Text('⚠️ Scored $percentage% ($correct/$total). Reach 80% accuracy to pass and complete this task!'),
-            action: SnackBarAction(
-              label: 'Retake',
-              textColor: Colors.amber,
-              onPressed: () => _executeTask(task),
-            ),
           ),
         );
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          }
+        });
       }
     }
   }

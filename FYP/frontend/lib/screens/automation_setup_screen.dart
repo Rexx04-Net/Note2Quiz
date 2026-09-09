@@ -291,9 +291,13 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
 
     setState(() {
       _isDemoMode = true;
-      _semesterStartDate = DateTime(now.year, now.month, now.day);
+      _useManualTiming = true;
       _selectedDay = todayDayName;
+      _semesterStartDate = DateTime(now.year, now.month, now.day);
+      _startTime = const TimeOfDay(hour: 8, minute: 0);
+      _endTime = const TimeOfDay(hour: 9, minute: 0);
       _customPrimaryReminderTime = TimeOfDay(hour: demoTrigger.hour, minute: demoTrigger.minute);
+      _autoTimingSummary = "$todayDayName (Today) at ${_formatTimeOfDay(_customPrimaryReminderTime!)} [DEMO MODE]";
       if (_emailController.text.trim().isEmpty ||
           _emailController.text.trim().toLowerCase() == 'guest' ||
           !_emailController.text.contains('@')) {

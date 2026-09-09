@@ -1,0 +1,16 @@
+﻿services:
+  - type: web
+    name: note2quiz-backend
+    env: python
+    rootDir: FYP/backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DEFAULT_TIMEZONE
+        value: Asia/Kuala_Lumpur
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: 587

@@ -141,6 +141,25 @@ class _QuizScreenState extends State<QuizScreen> {
     } catch (e) {
       debugPrint('Error saving quiz result: $e');
     }
+
+    // If this quiz was launched for a weekly timetable revision, update the automation progress
+    if (widget.weekNumber != null && widget.weekNumber! > 0) {
+      try {
+        await http.post(
+          Uri.parse('$baseUrl/api/automations/quiz-completed'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'notebook_id': widget.notebookId,
+            'week_number': widget.weekNumber,
+            'user_email': widget.userEmail ?? '',
+            'score': _correctAnswers,
+            'total_questions': total,
+          }),
+        );
+      } catch (e) {
+        debugPrint('Error recording automation quiz completion: $e');
+      }
+    }
   }
 
   void _showResultsDialog() {
