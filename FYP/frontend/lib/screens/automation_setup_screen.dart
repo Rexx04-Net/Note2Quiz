@@ -50,6 +50,7 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
   bool _enableEveningReminder = true;
   TimeOfDay _eveningReminderTime = const TimeOfDay(hour: 21, minute: 0);
   TimeOfDay? _customPrimaryReminderTime;
+  bool _isDemoMode = false;
 
   PlatformFile? _selectedPdf;
   bool _isLoading = false;
@@ -284,15 +285,27 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
   }
 
   void _setDemoNowTime() {
-    final now = DateTime.now().add(const Duration(minutes: 2));
+    final now = DateTime.now();
+    final demoTrigger = now.add(const Duration(minutes: 2));
+    final todayDayName = _daysOfWeek[now.weekday - 1];
+
     setState(() {
-      _customPrimaryReminderTime = TimeOfDay(hour: now.hour, minute: now.minute);
+      _isDemoMode = true;
+      _semesterStartDate = DateTime(now.year, now.month, now.day);
+      _selectedDay = todayDayName;
+      _customPrimaryReminderTime = TimeOfDay(hour: demoTrigger.hour, minute: demoTrigger.minute);
+      if (_emailController.text.trim().isEmpty ||
+          _emailController.text.trim().toLowerCase() == 'guest' ||
+          !_emailController.text.contains('@')) {
+        _emailController.text = 'yanwaitham@gmail.com';
+      }
     });
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text("⚡ Presentation Demo Mode: 1st Alert set to ${_formatTimeOfDay(_customPrimaryReminderTime!)} (in 2 mins)"),
+        content: Text("⚡ Presentation Demo Mode: 1st Alert set to ${_formatTimeOfDay(_customPrimaryReminderTime!)} TODAY (in 2 mins)"),
         backgroundColor: Colors.purpleAccent,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -355,12 +368,22 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
       final uri = Uri.parse('$baseUrl/api/automations');
       final request = http.MultipartRequest('POST', uri);
 
+      if (_isDemoMode) {
+        final now = DateTime.now();
+        final exactDemoTime = now.add(const Duration(minutes: 2));
+        _customPrimaryReminderTime = TimeOfDay(hour: exactDemoTime.hour, minute: exactDemoTime.minute);
+        _semesterStartDate = DateTime(now.year, now.month, now.day);
+        _selectedDay = _daysOfWeek[now.weekday - 1];
+      }
+
       final effectivePrimaryTime = _customPrimaryReminderTime ?? _endTime;
 
+      request.fields['is_demo_mode'] = _isDemoMode ? 'true' : 'false';
+      request.fields['demo_minutes'] = '2';
       request.fields['notebook_id'] = _selectedNotebookId;
       request.fields['course_name'] = _courseNameController.text.trim();
       request.fields['user_email'] = _emailController.text.trim();
-      if (_selectedLinkedCourseId != null && !_useManualTiming) {
+      if (_selectedLinkedCourseId != null && !_useManualTiming && !_isDemoMode) {
         request.fields['linked_course_id'] = _selectedLinkedCourseId!;
       }
       request.fields['class_day'] = _selectedDay;
@@ -920,9 +943,12 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
                         "3. Spaced Revision Reminders",
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                       ),
-                      if (_customPrimaryReminderTime != null)
+                      if (_customPrimaryReminderTime != null || _isDemoMode)
                         TextButton.icon(
-                          onPressed: () => setState(() => _customPrimaryReminderTime = null),
+                          onPressed: () => setState(() {
+                            _customPrimaryReminderTime = null;
+                            _isDemoMode = false;
+                          }),
                           icon: const Icon(Icons.restore, size: 14),
                           label: const Text("Reset to Auto", style: TextStyle(fontSize: 12)),
                         ),
@@ -1009,6 +1035,29 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
                       Text("Sets 1st alert in 2 mins for live demo", style: TextStyle(color: colors.mutedText, fontSize: 11)),
                     ],
                   ),
+                  if (_isDemoMode) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.purpleAccent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.bolt, color: Colors.purpleAccent, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "⚡ Live Demo Mode Active: Week 1 alert will trigger TODAY at ${_customPrimaryReminderTime != null ? _formatTimeOfDay(_customPrimaryReminderTime!) : 'now + 2m'} (in 2 mins). Real email will be dispatched to ${_emailController.text.trim()}!",
+                              style: const TextStyle(color: Colors.purpleAccent, fontSize: 11, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   SwitchListTile(
                     title: const Text("2nd Evening Follow-up Alert (9:00 PM)"),

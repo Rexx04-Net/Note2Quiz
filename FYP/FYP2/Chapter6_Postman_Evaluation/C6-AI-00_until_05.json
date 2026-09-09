@@ -1,0 +1,374 @@
+{
+	"id": "5039b0d0-2919-4b15-b51b-60ae2543d025",
+	"name": "Note2Quiz Chapter 6 Evaluation",
+	"timestamp": "2026-09-08T07:35:27.464Z",
+	"collection_id": "51277968-769c456f-db72-4396-b56f-af8f4fb1489c",
+	"folder_id": "51277968-80379fcb-68f5-4a12-8744-9b2acdc40b28",
+	"environment_id": "51277968-0c2dd4f3-d942-4a97-91cf-2d30ddbf27fa",
+	"totalPass": 65,
+	"delay": "1000",
+	"persist": true,
+	"status": "finished",
+	"startedAt": "2026-09-08T07:33:07.228Z",
+	"totalFail": 0,
+	"results": [
+		{
+			"id": "6fad0041-4ee5-4ba3-a923-1e0424432b6a",
+			"name": "C6-AI-00 - Fresh Run Setup: Create Unique Notebook",
+			"url": "http://127.0.0.1:5000/create-notebook",
+			"time": 8,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {
+				"Fresh AI notebook created": true
+			},
+			"testPassFailCounts": {
+				"Fresh AI notebook created": {
+					"pass": 5,
+					"fail": 0
+				}
+			},
+			"times": [
+				42,
+				14,
+				8,
+				7,
+				8
+			],
+			"allTests": [
+				{
+					"Fresh AI notebook created": true
+				},
+				{
+					"Fresh AI notebook created": true
+				},
+				{
+					"Fresh AI notebook created": true
+				},
+				{
+					"Fresh AI notebook created": true
+				},
+				{
+					"Fresh AI notebook created": true
+				}
+			]
+		},
+		{
+			"id": "69519679-1622-4f2c-baf3-a6aebadc1480",
+			"name": "C6-AI-01 - Fresh Run Setup: Add Unique Source",
+			"url": "http://127.0.0.1:5000/add-source",
+			"time": 14,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {
+				"Unique AI source stored": true
+			},
+			"testPassFailCounts": {
+				"Unique AI source stored": {
+					"pass": 5,
+					"fail": 0
+				}
+			},
+			"times": [
+				17,
+				8,
+				14,
+				13,
+				14
+			],
+			"allTests": [
+				{
+					"Unique AI source stored": true
+				},
+				{
+					"Unique AI source stored": true
+				},
+				{
+					"Unique AI source stored": true
+				},
+				{
+					"Unique AI source stored": true
+				},
+				{
+					"Unique AI source stored": true
+				}
+			]
+		},
+		{
+			"id": "c513b112-06d3-4d43-b2aa-0a7aff2707c3",
+			"name": "C6-AI-02 - FRESH Quiz Generation (5 runs)",
+			"url": "http://127.0.0.1:5000/generate-studio-item",
+			"time": 10763,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {
+				"HTTP 200": true,
+				"Implemented quiz JSON structure is valid": true,
+				"Response is not marked cached": true
+			},
+			"testPassFailCounts": {
+				"HTTP 200": {
+					"pass": 5,
+					"fail": 0
+				},
+				"Implemented quiz JSON structure is valid": {
+					"pass": 5,
+					"fail": 0
+				},
+				"Response is not marked cached": {
+					"pass": 5,
+					"fail": 0
+				}
+			},
+			"times": [
+				5542,
+				39304,
+				6814,
+				9315,
+				10763
+			],
+			"allTests": [
+				{
+					"HTTP 200": true,
+					"Implemented quiz JSON structure is valid": true,
+					"Response is not marked cached": true
+				},
+				{
+					"HTTP 200": true,
+					"Implemented quiz JSON structure is valid": true,
+					"Response is not marked cached": true
+				},
+				{
+					"HTTP 200": true,
+					"Implemented quiz JSON structure is valid": true,
+					"Response is not marked cached": true
+				},
+				{
+					"HTTP 200": true,
+					"Implemented quiz JSON structure is valid": true,
+					"Response is not marked cached": true
+				},
+				{
+					"HTTP 200": true,
+					"Implemented quiz JSON structure is valid": true,
+					"Response is not marked cached": true
+				}
+			]
+		},
+		{
+			"id": "4a1ff882-9c11-47c3-9c04-7019eba7826d",
+			"name": "C6-AI-03 - FRESH Flashcard Generation (5 runs)",
+			"url": "http://127.0.0.1:5000/generate-studio-item",
+			"time": 1587,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {
+				"HTTP 200": true,
+				"Implemented flashcard JSON structure is valid": true,
+				"Fresh response is not marked cached": true
+			},
+			"testPassFailCounts": {
+				"HTTP 200": {
+					"pass": 5,
+					"fail": 0
+				},
+				"Implemented flashcard JSON structure is valid": {
+					"pass": 5,
+					"fail": 0
+				},
+				"Fresh response is not marked cached": {
+					"pass": 5,
+					"fail": 0
+				}
+			},
+			"times": [
+				1488,
+				1765,
+				1380,
+				1413,
+				1587
+			],
+			"allTests": [
+				{
+					"HTTP 200": true,
+					"Implemented flashcard JSON structure is valid": true,
+					"Fresh response is not marked cached": true
+				},
+				{
+					"HTTP 200": true,
+					"Implemented flashcard JSON structure is valid": true,
+					"Fresh response is not marked cached": true
+				},
+				{
+					"HTTP 200": true,
+					"Implemented flashcard JSON structure is valid": true,
+					"Fresh response is not marked cached": true
+				},
+				{
+					"HTTP 200": true,
+					"Implemented flashcard JSON structure is valid": true,
+					"Fresh response is not marked cached": true
+				},
+				{
+					"HTTP 200": true,
+					"Implemented flashcard JSON structure is valid": true,
+					"Fresh response is not marked cached": true
+				}
+			]
+		},
+		{
+			"id": "d2dd4f61-2fc4-477b-8ac2-8fc77b438765",
+			"name": "C6-AI-04 - FRESH Mind Map Generation (5 runs)",
+			"url": "http://127.0.0.1:5000/generate-studio-item",
+			"time": 2745,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {
+				"HTTP 200": true,
+				"Implemented mind-map JSON structure is valid": true,
+				"Fresh response is not marked cached": true
+			},
+			"testPassFailCounts": {
+				"HTTP 200": {
+					"pass": 5,
+					"fail": 0
+				},
+				"Implemented mind-map JSON structure is valid": {
+					"pass": 5,
+					"fail": 0
+				},
+				"Fresh response is not marked cached": {
+					"pass": 5,
+					"fail": 0
+				}
+			},
+			"times": [
+				2790,
+				2838,
+				2769,
+				2906,
+				2745
+			],
+			"allTests": [
+				{
+					"HTTP 200": true,
+					"Implemented mind-map JSON structure is valid": true,
+					"Fresh response is not marked cached": true
+				},
+				{
+					"HTTP 200": true,
+					"Implemented mind-map JSON structure is valid": true,
+					"Fresh response is not marked cached": true
+				},
+				{
+					"HTTP 200": true,
+					"Implemented mind-map JSON structure is valid": true,
+					"Fresh response is not marked cached": true
+				},
+				{
+					"HTTP 200": true,
+					"Implemented mind-map JSON structure is valid": true,
+					"Fresh response is not marked cached": true
+				},
+				{
+					"HTTP 200": true,
+					"Implemented mind-map JSON structure is valid": true,
+					"Fresh response is not marked cached": true
+				}
+			]
+		},
+		{
+			"id": "d85d3579-63f6-4e96-a7c9-f0f36a1900b3",
+			"name": "C6-AI-05 - FRESH Briefing SSE Completion (5 runs; NOT TTFT)",
+			"url": "http://127.0.0.1:5000/stream-studio-item",
+			"time": 2183,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {
+				"HTTP 200 with event-stream content type": true,
+				"At least one application chunk and a fresh completion event exist": true
+			},
+			"testPassFailCounts": {
+				"HTTP 200 with event-stream content type": {
+					"pass": 5,
+					"fail": 0
+				},
+				"At least one application chunk and a fresh completion event exist": {
+					"pass": 5,
+					"fail": 0
+				}
+			},
+			"times": [
+				2606,
+				2502,
+				2404,
+				3092,
+				2183
+			],
+			"allTests": [
+				{
+					"HTTP 200 with event-stream content type": true,
+					"At least one application chunk and a fresh completion event exist": true
+				},
+				{
+					"HTTP 200 with event-stream content type": true,
+					"At least one application chunk and a fresh completion event exist": true
+				},
+				{
+					"HTTP 200 with event-stream content type": true,
+					"At least one application chunk and a fresh completion event exist": true
+				},
+				{
+					"HTTP 200 with event-stream content type": true,
+					"At least one application chunk and a fresh completion event exist": true
+				},
+				{
+					"HTTP 200 with event-stream content type": true,
+					"At least one application chunk and a fresh completion event exist": true
+				}
+			]
+		}
+	],
+	"count": 5,
+	"totalTime": 106351,
+	"collection": {
+		"requests": [
+			{
+				"id": "6fad0041-4ee5-4ba3-a923-1e0424432b6a",
+				"method": "POST"
+			},
+			{
+				"id": "69519679-1622-4f2c-baf3-a6aebadc1480",
+				"method": "POST"
+			},
+			{
+				"id": "c513b112-06d3-4d43-b2aa-0a7aff2707c3",
+				"method": "POST"
+			},
+			{
+				"id": "4a1ff882-9c11-47c3-9c04-7019eba7826d",
+				"method": "POST"
+			},
+			{
+				"id": "d2dd4f61-2fc4-477b-8ac2-8fc77b438765",
+				"method": "POST"
+			},
+			{
+				"id": "d85d3579-63f6-4e96-a7c9-f0f36a1900b3",
+				"method": "POST"
+			}
+		]
+	}
+}

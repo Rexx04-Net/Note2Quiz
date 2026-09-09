@@ -14,3 +14,8 @@ flutter_*.log
 .flutter-plugins-dependencies
 build/
 backend/data_storage/
+~$*
+report_review_work/
+Nitro5_Safe_Cleanup.bat
+*.docx
+*.doc

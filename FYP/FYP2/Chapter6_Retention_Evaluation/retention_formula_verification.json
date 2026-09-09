@@ -1,0 +1,231 @@
+{
+  "production_source_file": "C:\\src\\FYP\\backend\\utils\\mastery_engine.py",
+  "production_function": "calculate_topic_mastery",
+  "fixed_evaluation_time": "2026-09-09 12:00:00",
+  "formula": {
+    "days_elapsed": "max(0.0, (now - last_reviewed_at).total_seconds() / 86400.0)",
+    "stability": "1.0 + (0.65 * (max(1, int(review_count or 1)) - 1))",
+    "decay_factor": "exp(-days_elapsed / (7.0 * stability))",
+    "raw_retention": "max(0.0, min(100.0, float(last_percentage) * decay_factor))",
+    "mastery_score": "round(raw_retention)"
+  },
+  "constants_and_thresholds": {
+    "minimum_review_count": 1,
+    "base_stability": 1.0,
+    "stability_increment_per_additional_review": 0.65,
+    "decay_time_parameter_days": 7.0,
+    "seconds_per_day": 86400.0,
+    "retention_minimum": 0.0,
+    "retention_maximum": 100.0,
+    "fresh_threshold_inclusive": 80,
+    "fading_threshold_inclusive": 50,
+    "critical_threshold": "mastery_score < 50"
+  },
+  "comparison_tolerance": 0.01,
+  "comparison_basis": "The production function returns round(raw_retention), so the independently calculated raw value is rounded before comparison with the returned integer mastery_score.",
+  "parameter_classification": {
+    "classification": "prototype/design heuristics",
+    "parameters": [
+      0.65,
+      7.0,
+      80,
+      50
+    ],
+    "basis": "The inspected production implementation defines these values directly and contains no citation or calibration evidence that scientifically validates them.",
+    "scientifically_validated": false
+  },
+  "test_cases": [
+    {
+      "id": "RET-01",
+      "scenario": "Very recent review / high retention",
+      "last_percentage": 96,
+      "last_reviewed_at": "2026-09-09 06:00:00",
+      "review_count": 1,
+      "expected": {
+        "days_elapsed": 0.25,
+        "stability": 1.0,
+        "decay_factor": 0.96491594437237,
+        "raw_retention": 92.63193065974752,
+        "mastery_score": 93,
+        "status": "fresh",
+        "status_label": "Fresh (Mastered)",
+        "needs_review": false
+      },
+      "actual": {
+        "mastery_score": 93,
+        "base_score": 96,
+        "status": "fresh",
+        "status_label": "Fresh (Mastered)",
+        "decay_days": 0.2,
+        "color": "#4CAF50",
+        "stability": 1.0,
+        "review_count": 1,
+        "needs_review": false
+      },
+      "expected_retention_value": 93,
+      "actual_retention_value": 93,
+      "expected_category": "fresh",
+      "actual_category": "fresh",
+      "absolute_difference": 0.0,
+      "tolerance": 0.01,
+      "value_matches": true,
+      "category_matches": true,
+      "result": "PASS"
+    },
+    {
+      "id": "RET-02",
+      "scenario": "Moderate decay with repeated-review stability",
+      "last_percentage": 92,
+      "last_reviewed_at": "2026-09-05 12:00:00",
+      "review_count": 3,
+      "expected": {
+        "days_elapsed": 4.0,
+        "stability": 2.3,
+        "decay_factor": 0.7800110404551882,
+        "raw_retention": 71.76101572187731,
+        "mastery_score": 72,
+        "status": "fading",
+        "status_label": "Fading (Review Soon)",
+        "needs_review": true
+      },
+      "actual": {
+        "mastery_score": 72,
+        "base_score": 92,
+        "status": "fading",
+        "status_label": "Fading (Review Soon)",
+        "decay_days": 4.0,
+        "color": "#FFC107",
+        "stability": 2.3,
+        "review_count": 3,
+        "needs_review": true
+      },
+      "expected_retention_value": 72,
+      "actual_retention_value": 72,
+      "expected_category": "fading",
+      "actual_category": "fading",
+      "absolute_difference": 0.0,
+      "tolerance": 0.01,
+      "value_matches": true,
+      "category_matches": true,
+      "result": "PASS"
+    },
+    {
+      "id": "RET-03",
+      "scenario": "Near the high-to-medium threshold",
+      "last_percentage": 100,
+      "last_reviewed_at": "2026-09-07 22:48:00",
+      "review_count": 1,
+      "expected": {
+        "days_elapsed": 1.55,
+        "stability": 1.0,
+        "decay_factor": 0.8013731610437388,
+        "raw_retention": 80.13731610437388,
+        "mastery_score": 80,
+        "status": "fresh",
+        "status_label": "Fresh (Mastered)",
+        "needs_review": false
+      },
+      "actual": {
+        "mastery_score": 80,
+        "base_score": 100,
+        "status": "fresh",
+        "status_label": "Fresh (Mastered)",
+        "decay_days": 1.6,
+        "color": "#4CAF50",
+        "stability": 1.0,
+        "review_count": 1,
+        "needs_review": false
+      },
+      "expected_retention_value": 80,
+      "actual_retention_value": 80,
+      "expected_category": "fresh",
+      "actual_category": "fresh",
+      "absolute_difference": 0.0,
+      "tolerance": 0.01,
+      "value_matches": true,
+      "category_matches": true,
+      "result": "PASS"
+    },
+    {
+      "id": "RET-04",
+      "scenario": "Near and below the review-needed threshold",
+      "last_percentage": 100,
+      "last_reviewed_at": "2026-09-07 20:24:00",
+      "review_count": 1,
+      "expected": {
+        "days_elapsed": 1.65,
+        "stability": 1.0,
+        "decay_factor": 0.7900063577929426,
+        "raw_retention": 79.00063577929426,
+        "mastery_score": 79,
+        "status": "fading",
+        "status_label": "Fading (Review Soon)",
+        "needs_review": true
+      },
+      "actual": {
+        "mastery_score": 79,
+        "base_score": 100,
+        "status": "fading",
+        "status_label": "Fading (Review Soon)",
+        "decay_days": 1.6,
+        "color": "#FFC107",
+        "stability": 1.0,
+        "review_count": 1,
+        "needs_review": true
+      },
+      "expected_retention_value": 79,
+      "actual_retention_value": 79,
+      "expected_category": "fading",
+      "actual_category": "fading",
+      "absolute_difference": 0.0,
+      "tolerance": 0.01,
+      "value_matches": true,
+      "category_matches": true,
+      "result": "PASS"
+    },
+    {
+      "id": "RET-05",
+      "scenario": "Later review / low retention",
+      "last_percentage": 90,
+      "last_reviewed_at": "2026-08-26 12:00:00",
+      "review_count": 1,
+      "expected": {
+        "days_elapsed": 14.0,
+        "stability": 1.0,
+        "decay_factor": 0.1353352832366127,
+        "raw_retention": 12.180175491295143,
+        "mastery_score": 12,
+        "status": "critical",
+        "status_label": "At Risk (Review Needed)",
+        "needs_review": true
+      },
+      "actual": {
+        "mastery_score": 12,
+        "base_score": 90,
+        "status": "critical",
+        "status_label": "At Risk (Review Needed)",
+        "decay_days": 14.0,
+        "color": "#F44336",
+        "stability": 1.0,
+        "review_count": 1,
+        "needs_review": true
+      },
+      "expected_retention_value": 12,
+      "actual_retention_value": 12,
+      "expected_category": "critical",
+      "actual_category": "critical",
+      "absolute_difference": 0.0,
+      "tolerance": 0.01,
+      "value_matches": true,
+      "category_matches": true,
+      "result": "PASS"
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "overall_result": "PASS"
+  },
+  "interpretation_limit": "These deterministic checks verify implementation consistency for selected inputs; they do not scientifically validate the heuristic formula, constants, or thresholds."
+}

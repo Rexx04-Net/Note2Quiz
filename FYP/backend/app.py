@@ -55,12 +55,11 @@ try:
     init_indexes()
 
     # Initialize APScheduler for notification polling
-    if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-        scheduler = BackgroundScheduler()
-        scheduler.add_job(func=check_and_send_due_notifications, trigger="interval", minutes=1, id="notifier_job")
-        scheduler.start()
-        atexit.register(lambda: scheduler.shutdown(wait=False))
-        print("✅ [Scheduler] APScheduler background worker started successfully.")
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(func=check_and_send_due_notifications, trigger="interval", seconds=10, id="notifier_job")
+    scheduler.start()
+    atexit.register(lambda: scheduler.shutdown(wait=False))
+    print("✅ [Scheduler] APScheduler background worker started successfully (polling every 10s).")
 except Exception as bp_err:
     print(f"⚠️ [Automation Blueprint] Initialization error: {bp_err}")
 
@@ -302,7 +301,8 @@ def delete_study_plan(plan_id, user_email):
 def compute_content_hash(sources, tool_type, difficulty, output_language):
     """Computes a unique SHA-256 fingerprint for input sources and generation parameters."""
     hasher = hashlib.sha256()
-    hasher.update(f"{tool_type}:{difficulty}:{output_language}".encode('utf-8'))
+    cache_version = "v4_no_hashes" if tool_type == "report" else "v1"
+    hasher.update(f"{tool_type}:{difficulty}:{output_language}:{cache_version}".encode('utf-8'))
     if isinstance(sources, list):
         for s in sorted(sources, key=lambda x: str(x.get('id', x.get('title', '')))):
             c = s.get('content', '')
@@ -877,6 +877,99 @@ def delete_source():
 
     return jsonify({"success": True})
 
+def build_briefing_prompt(filtered_sources, context, output_language):
+    """Constructs a modular, topic-by-topic briefing document prompt when multiple sources are selected."""
+    today_str = datetime.datetime.now().strftime("%B %d, %Y")
+
+    def _topic_sort_key(s):
+        title = s.get('title', '')
+        match = re.search(r'topic[_\s\-]*(\d+)', title, re.IGNORECASE)
+        if match:
+            return (0, int(match.group(1)), title)
+        return (1, 0, title)
+
+    sorted_sources = sorted(filtered_sources, key=_topic_sort_key)
+
+    if len(sorted_sources) > 1:
+        topic_descriptions = []
+        for idx, src in enumerate(sorted_sources, 1):
+            raw_title = src.get('title', f'Topic {idx}')
+            clean_t = re.sub(r'\.(pdf|docx|pptx|txt|md|html)$', '', raw_title, flags=re.IGNORECASE).replace('_', ' ').strip()
+            topic_descriptions.append(f"{idx}. {clean_t}")
+
+        topics_list_str = "\n".join(topic_descriptions)
+
+        prompt = f"""Write an executive, highly structured study briefing document in {output_language}.
+The user has specifically selected {len(sorted_sources)} distinct topics/sources:
+{topics_list_str}
+
+CRITICAL REQUIREMENT:
+The user demands a clear TOPIC-BY-TOPIC briefing breakdown.
+You MUST provide an individual, dedicated section for EACH of the {len(sorted_sources)} selected topics in the exact order listed above.
+Do NOT merge them into one generic summary!
+Every selected topic MUST have its own dedicated section header: `## 📘 Topic [N]: [Topic Title]`.
+
+STRICT FORMATTING RULE:
+Do NOT output any triple hashes '###' anywhere in your response. Only use '## ' for section titles.
+
+Start with the header line: **Generated Date:** {today_str}
+Do NOT include 'To:' or 'Subject:' metadata lines.
+
+Structure the document exactly with these Markdown sections:
+
+## 🎯 Core Objectives
+- 3 to 4 cross-cutting learning goals synthesizing across all {len(sorted_sources)} selected topics.
+
+## 📊 Executive Overview
+- High-level executive synthesis summarizing how these {len(sorted_sources)} topics interconnect in the curriculum.
+
+## 📚 Topic-by-Topic Briefing Breakdown
+"""
+        for idx, src in enumerate(sorted_sources, 1):
+            raw_title = src.get('title', f'Topic {idx}')
+            clean_t = re.sub(r'\.(pdf|docx|pptx|txt|md|html)$', '', raw_title, flags=re.IGNORECASE).replace('_', ' ').strip()
+            prompt += f"""
+## 📘 Topic {idx}: {clean_t}
+- **Overview & Scope**: Core purpose, problem space, or domain addressed in this topic.
+- **Key Concepts & Theoretical Foundations**: 3-4 essential terms, definitions, architectures, or frameworks from this topic.
+- **Technical Mechanisms & Methods**: Key algorithms, workflows, design patterns, or tools discussed in this source.
+- **Critical Exam Takeaways**: Essential points, common misconceptions, or formulas students must master.
+"""
+
+        prompt += f"""
+## 💡 Cross-Topic Synthesis & Exam Mastery Takeaways
+- **Interconnections & Comparisons**: Direct comparisons, dependencies, or trade-offs between the topics.
+- **High-Yield Exam Focus**: Critical questions, probable exam topics, and essential takeaways.
+
+Context:
+{context}"""
+    else:
+        single_src = sorted_sources[0] if sorted_sources else {}
+        raw_title = single_src.get('title', 'Study Material')
+        clean_t = re.sub(r'\.(pdf|docx|pptx|txt|md|html)$', '', raw_title, flags=re.IGNORECASE).replace('_', ' ').strip()
+
+        prompt = f"""Write a comprehensive study briefing document in {output_language} for "{clean_t}".
+Start with the header line: **Generated Date:** {today_str}
+Do NOT include 'To:' or 'Subject:' metadata lines.
+Structure with clear section headings containing relevant emojis:
+
+## 🎯 Core Objectives
+- 3 to 4 clear educational objectives for this topic.
+
+## 📊 Executive Summary
+- Concise overview of this document and its central concepts.
+
+## 📌 Key Concepts & Detailed Breakdown
+- In-depth, structured explanation of core definitions, architectures, mechanisms, and frameworks with clear bullet points.
+
+## 💡 Practical Takeaways & Exam Checklist
+- High-yield summary, exam checklist points, and practical applications.
+
+Context:
+{context}"""
+
+    return prompt
+
 @app.route('/generate-studio-item', methods=['POST'])
 def generate_studio_item():
     data = request.json or {}
@@ -1073,12 +1166,7 @@ Context: {context}"""
         Context: {context}"""
 
     elif tool_type == "report":
-        today_str = datetime.datetime.now().strftime("%B %d, %Y")
-        prompt = f"""Write a comprehensive study briefing document in {output_language}.
-        Start with the header line: **Generated Date:** {today_str}
-        Do NOT include 'To:' or 'Subject:' metadata lines.
-        Structure with clear section headings containing relevant emojis (e.g. 🎯 Core Objectives, 📊 Executive Summary, 📌 Key Concepts & Principles, 💡 Practical Takeaways & Summary), and clear structured bullet points.
-        Context: {context}"""
+        prompt = build_briefing_prompt(filtered_sources, context, output_language)
 
     try:
         task_category = "fast_interactive" if tool_type in ["flashcard", "mindmap", "report"] else "standard"
@@ -1122,6 +1210,8 @@ Context: {context}"""
                 print(f"⚠️ [clean_ai_response Failed] Tool: {tool_type}. Raw response:\n{text[:400]}")
                 return jsonify({"type": "text", "data": "Error: AI response was not valid JSON."})
 
+        if tool_type == "report":
+            text = text.replace('### ', '## ').replace('###', '')
         item_title = "Executive Report" if tool_type == "report" else "Mind Map"
         set_content_cache(cache_key, tool_type, text)
         history_item = {
@@ -1143,6 +1233,7 @@ Context: {context}"""
 
 @app.route('/stream-studio-item', methods=['POST'])
 def stream_studio_item():
+    sse_request_started_at = time.perf_counter()
     data = request.json or {}
     notebook_id = data.get('notebook_id')
     tool_type = data.get('tool_type', 'report')
@@ -1176,6 +1267,7 @@ def stream_studio_item():
 
     # 1. Instant Cached Stream (0.05s simulated high-speed stream from memory)
     if cached_text and isinstance(cached_text, str):
+        print("SSE_RESPONSE_CACHED=true", flush=True)
         def cached_stream():
             chunk_size = 80
             for i in range(0, len(cached_text), chunk_size):
@@ -1205,27 +1297,31 @@ def stream_studio_item():
         return response
 
     # 2. Build High-Density RAG Context
+    print("SSE_RESPONSE_CACHED=false", flush=True)
     context = rank_and_assemble_rag_context(filtered_sources, max_chars=12000)
 
     if tool_type == "report":
-        today_str = datetime.datetime.now().strftime("%B %d, %Y")
-        prompt = f"""Write a comprehensive study briefing document in {output_language}.
-        Start with the header line: **Generated Date:** {today_str}
-        Do NOT include 'To:' or 'Subject:' metadata lines.
-        Structure with clear section headings containing relevant emojis (e.g. 🎯 Core Objectives, 📊 Executive Summary, 📌 Key Concepts & Principles, 💡 Practical Takeaways & Summary), and clear structured bullet points.
-        Context: {context}"""
+        prompt = build_briefing_prompt(filtered_sources, context, output_language)
     else:
         prompt = f"""Generate comprehensive structured study notes in {output_language} with headings, key points, definitions, code/formula examples, and takeaways.
         Context: {context}"""
 
     def event_stream():
         full_accumulated_text = []
+        first_chunk_logged = False
         try:
             for text_chunk in stream_with_fallback(prompt):
                 full_accumulated_text.append(text_chunk)
-                yield f"data: {json.dumps({'chunk': text_chunk})}\n\n"
+                chunk_event = f"data: {json.dumps({'chunk': text_chunk})}\n\n"
+                if not first_chunk_logged:
+                    first_chunk_logged = True
+                    first_chunk_ms = (time.perf_counter() - sse_request_started_at) * 1000
+                    print(f"SSE_FIRST_CHUNK_MS={first_chunk_ms:.2f}", flush=True)
+                yield chunk_event
 
             complete_text = "".join(full_accumulated_text).strip()
+            if tool_type == "report":
+                complete_text = complete_text.replace('### ', '## ').replace('###', '')
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
             item_title = "Executive Briefing Doc" if tool_type == "report" else "AI Synthesized Notes"
 
@@ -1316,8 +1412,11 @@ def save_quiz_result():
     return jsonify({"success": True, "result": result_entry})
 
 
-@app.route('/generate-weakness-drill', methods=['POST'])
+@app.route('/api/mistakes-bank/generate-drill', methods=['POST', 'OPTIONS'])
+@app.route('/generate-weakness-drill', methods=['POST', 'OPTIONS'])
 def generate_weakness_drill():
+    if request.method == 'OPTIONS':
+        return jsonify({"success": True}), 200
     data = request.json or {}
     notebook_id = data.get('notebook_id')
     output_language = data.get('output_language', 'English')
@@ -1342,6 +1441,7 @@ def generate_weakness_drill():
         return jsonify({
             "success": False,
             "has_mistakes": False,
+            "drill_questions": [],
             "message": "🎉 No mistakes recorded yet! Take a standard or hard quiz first to identify your weak points."
         }), 200
 
@@ -1412,6 +1512,7 @@ STRICT JSON FORMAT:
                 "success": True,
                 "has_mistakes": True,
                 "mistakes_count": len(mistakes),
+                "drill_questions": json_data,
                 "data": json_data,
                 "history_item": history_item
             })

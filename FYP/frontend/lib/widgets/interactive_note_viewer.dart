@@ -35,7 +35,8 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
   }
 
   void _copyToClipboard(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: widget.content));
+    final cleanContent = widget.content.replaceAll('### ', '## ').replaceAll('###', '');
+    Clipboard.setData(ClipboardData(text: cleanContent));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Row(
@@ -599,7 +600,8 @@ class _InteractiveNoteViewerState extends State<InteractiveNoteViewer> {
     StringBuffer codeBuffer = StringBuffer();
 
     for (var line in lines) {
-      final trimmed = line.trim();
+      final cleanLine = line.replaceAll('### ', '## ').replaceAll('###', '');
+      final trimmed = cleanLine.trim();
 
       if (trimmed.startsWith('```')) {
         if (insideCodeFence) {

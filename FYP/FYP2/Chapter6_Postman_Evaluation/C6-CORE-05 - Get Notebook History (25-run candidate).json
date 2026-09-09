@@ -1,0 +1,179 @@
+{
+	"id": "09bab291-f7f7-4131-9f64-ddd050f315e0",
+	"name": "Note2Quiz Chapter 6 Evaluation",
+	"timestamp": "2026-09-08T07:01:46.632Z",
+	"collection_id": "51277968-769c456f-db72-4396-b56f-af8f4fb1489c",
+	"folder_id": "51277968-f3a53d1c-afbb-48ec-af6d-78a9498d3740",
+	"environment_id": "51277968-0c2dd4f3-d942-4a97-91cf-2d30ddbf27fa",
+	"totalPass": 50,
+	"delay": "100",
+	"persist": true,
+	"status": "finished",
+	"startedAt": "2026-09-08T07:01:40.477Z",
+	"totalFail": 0,
+	"results": [
+		{
+			"id": "cb7d6deb-fd6d-4238-93c9-8ccc77ef143c",
+			"name": "C6-CORE-05 - Get Notebook History (25-run candidate)",
+			"url": "http://127.0.0.1:5000/get-notebook-history",
+			"time": 10,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {
+				"HTTP 200": true,
+				"History arrays exist": true
+			},
+			"testPassFailCounts": {
+				"HTTP 200": {
+					"pass": 25,
+					"fail": 0
+				},
+				"History arrays exist": {
+					"pass": 25,
+					"fail": 0
+				}
+			},
+			"times": [
+				10,
+				6,
+				21,
+				6,
+				6,
+				6,
+				7,
+				6,
+				9,
+				7,
+				7,
+				7,
+				7,
+				7,
+				7,
+				7,
+				8,
+				7,
+				6,
+				12,
+				7,
+				8,
+				9,
+				8,
+				10
+			],
+			"allTests": [
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				},
+				{
+					"HTTP 200": true,
+					"History arrays exist": true
+				}
+			]
+		}
+	],
+	"count": 25,
+	"totalTime": 201,
+	"collection": {
+		"requests": [
+			{
+				"id": "cb7d6deb-fd6d-4238-93c9-8ccc77ef143c",
+				"method": "POST"
+			}
+		]
+	}
+}

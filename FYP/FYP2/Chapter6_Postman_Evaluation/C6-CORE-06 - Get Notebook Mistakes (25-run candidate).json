@@ -1,0 +1,179 @@
+{
+	"id": "2a8413be-f31b-4be1-bf4f-1890e4d4181f",
+	"name": "Note2Quiz Chapter 6 Evaluation",
+	"timestamp": "2026-09-08T07:03:58.497Z",
+	"collection_id": "51277968-769c456f-db72-4396-b56f-af8f4fb1489c",
+	"folder_id": "51277968-f3a53d1c-afbb-48ec-af6d-78a9498d3740",
+	"environment_id": "51277968-0c2dd4f3-d942-4a97-91cf-2d30ddbf27fa",
+	"totalPass": 50,
+	"delay": "100",
+	"persist": true,
+	"status": "finished",
+	"startedAt": "2026-09-08T07:03:52.781Z",
+	"totalFail": 0,
+	"results": [
+		{
+			"id": "731ef5bb-2560-45d6-a0b6-647daae0ef21",
+			"name": "C6-CORE-06 - Get Notebook Mistakes (25-run candidate)",
+			"url": "http://127.0.0.1:5000/get-notebook-mistakes?notebook_id=2bf909d0-5e45-41ea-a2cb-54f7c35b24a5",
+			"time": 7,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {
+				"HTTP 200": true,
+				"Mistake-bank response shape exists": true
+			},
+			"testPassFailCounts": {
+				"HTTP 200": {
+					"pass": 25,
+					"fail": 0
+				},
+				"Mistake-bank response shape exists": {
+					"pass": 25,
+					"fail": 0
+				}
+			},
+			"times": [
+				11,
+				6,
+				7,
+				7,
+				6,
+				6,
+				5,
+				7,
+				7,
+				6,
+				6,
+				6,
+				6,
+				7,
+				6,
+				7,
+				6,
+				6,
+				7,
+				6,
+				7,
+				6,
+				7,
+				6,
+				7
+			],
+			"allTests": [
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				},
+				{
+					"HTTP 200": true,
+					"Mistake-bank response shape exists": true
+				}
+			]
+		}
+	],
+	"count": 25,
+	"totalTime": 164,
+	"collection": {
+		"requests": [
+			{
+				"id": "731ef5bb-2560-45d6-a0b6-647daae0ef21",
+				"method": "GET"
+			}
+		]
+	}
+}

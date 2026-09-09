@@ -135,7 +135,7 @@ class _MistakesBankScreenState extends State<MistakesBankScreen> {
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        final questions = data['drill_questions'] as List<dynamic>? ?? [];
+        final questions = (data['drill_questions'] ?? data['data']) as List<dynamic>? ?? [];
 
         if (questions.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(

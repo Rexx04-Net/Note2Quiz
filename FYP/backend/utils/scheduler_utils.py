@@ -28,7 +28,9 @@ def calculate_weekly_schedule(
     revision_delay_hours=None,
     primary_reminder_time_str=None,
     enable_evening_reminder=True,
-    evening_reminder_time_str="21:00"
+    evening_reminder_time_str="21:00",
+    is_demo_mode=False,
+    demo_minutes=2
 ):
     if timezone_str is None:
         timezone_str = config.DEFAULT_TIMEZONE
@@ -61,36 +63,49 @@ def calculate_weekly_schedule(
         if has_break_week and week_idx == 7:
             current_class_date += datetime.timedelta(weeks=1)
 
-        # Local start & end datetimes
-        local_start = tz.localize(datetime.datetime.combine(
-            current_class_date, datetime.time(start_h, start_m)
-        ))
-        local_end = tz.localize(datetime.datetime.combine(
-            current_class_date, datetime.time(end_h, end_m)
-        ))
-
-        # Handle end time past midnight
-        if local_end <= local_start:
-            local_end += datetime.timedelta(days=1)
-
-        # 1st Email Dispatch: Exactly at Class End Time of that day (or custom time if specified)
-        if primary_reminder_time_str and primary_reminder_time_str != "CLASS_END":
-            prim_h, prim_m = parse_time_str(primary_reminder_time_str)
-            primary_trigger = tz.localize(datetime.datetime.combine(
-                current_class_date, datetime.time(prim_h, prim_m)
-            ))
-        elif revision_delay_hours is not None and revision_delay_hours > 0:
-            primary_trigger = local_end + datetime.timedelta(hours=revision_delay_hours)
+        # Presentation Demo Mode: Week 1 triggers in demo_minutes from current local time
+        if is_demo_mode and week_idx == 1:
+            now_local = datetime.datetime.now(tz)
+            local_start = now_local - datetime.timedelta(hours=1)
+            local_end = now_local - datetime.timedelta(minutes=1)
+            primary_trigger = now_local + datetime.timedelta(minutes=demo_minutes)
+            if enable_evening_reminder:
+                evening_trigger = tz.localize(datetime.datetime.combine(
+                    now_local.date(), datetime.time(eve_h, eve_m)
+                ))
+            else:
+                evening_trigger = None
         else:
-            primary_trigger = local_end
-
-        # 2nd Email Dispatch: 9:00 PM on the day of class
-        if enable_evening_reminder:
-            evening_trigger = tz.localize(datetime.datetime.combine(
-                current_class_date, datetime.time(eve_h, eve_m)
+            # Local start & end datetimes
+            local_start = tz.localize(datetime.datetime.combine(
+                current_class_date, datetime.time(start_h, start_m)
             ))
-        else:
-            evening_trigger = None
+            local_end = tz.localize(datetime.datetime.combine(
+                current_class_date, datetime.time(end_h, end_m)
+            ))
+
+            # Handle end time past midnight
+            if local_end <= local_start:
+                local_end += datetime.timedelta(days=1)
+
+            # 1st Email Dispatch: Exactly at Class End Time of that day (or custom time if specified)
+            if primary_reminder_time_str and primary_reminder_time_str != "CLASS_END":
+                prim_h, prim_m = parse_time_str(primary_reminder_time_str)
+                primary_trigger = tz.localize(datetime.datetime.combine(
+                    current_class_date, datetime.time(prim_h, prim_m)
+                ))
+            elif revision_delay_hours is not None and revision_delay_hours > 0:
+                primary_trigger = local_end + datetime.timedelta(hours=revision_delay_hours)
+            else:
+                primary_trigger = local_end
+
+            # 2nd Email Dispatch: 9:00 PM on the day of class
+            if enable_evening_reminder:
+                evening_trigger = tz.localize(datetime.datetime.combine(
+                    current_class_date, datetime.time(eve_h, eve_m)
+                ))
+            else:
+                evening_trigger = None
 
         topic_item = next((t for t in weekly_topics if t.get("week_number") == week_idx), None)
         topic_title = topic_item["topic_title"] if topic_item else f"Week {week_idx} Topic"

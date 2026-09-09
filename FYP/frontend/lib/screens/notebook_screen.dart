@@ -841,8 +841,11 @@ class _NotebookScreenState extends State<NotebookScreen> {
     final settings = AppSettingsScope.of(context);
     final isMobile = MediaQuery.of(context).size.width < 900;
 
-    return Scaffold(
-      backgroundColor: colors.background,
+    return Title(
+      title: 'Note2Quiz',
+      color: const Color(0xFF0062FE),
+      child: Scaffold(
+        backgroundColor: colors.background,
       appBar: AppBar(
         titleSpacing: isMobile ? 12 : 20,
         title: Column(
@@ -1159,8 +1162,9 @@ class _NotebookScreenState extends State<NotebookScreen> {
           if (_isLoading) const LoadingOverlay(),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildSourcesRail({bool isMobile = false}) {
     final colors = context.appColors;

@@ -58,7 +58,8 @@ class StudyApp extends StatelessWidget {
         return AppSettingsScope(
           controller: controller,
           child: MaterialApp(
-            title: 'Note2Quiz Pro',
+            title: 'Note2Quiz',
+            onGenerateTitle: (context) => 'Note2Quiz',
             navigatorKey: DeepLinkService().navigatorKey,
             debugShowCheckedModeBanner: false,
             theme: StudyAppTheme.lightTheme(),

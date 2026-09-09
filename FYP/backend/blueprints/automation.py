@@ -50,6 +50,11 @@ def create_or_update_automation():
     primary_reminder_time = form.get("primary_reminder_time", "18:00").strip()
     enable_evening_reminder = form.get("enable_evening_reminder", "true").lower() in ["true", "1", "yes"]
     evening_reminder_time = form.get("evening_reminder_time", "21:00").strip()
+    is_demo_mode = form.get("is_demo_mode", "false").lower() in ["true", "1", "yes"]
+    try:
+        demo_minutes = int(form.get("demo_minutes", 2))
+    except (ValueError, TypeError):
+        demo_minutes = 2
 
     # Read PDF bytes
     syllabus_file = files["syllabus"]
@@ -69,7 +74,9 @@ def create_or_update_automation():
         weekly_topics=weekly_topics,
         primary_reminder_time_str=primary_reminder_time,
         enable_evening_reminder=enable_evening_reminder,
-        evening_reminder_time_str=evening_reminder_time
+        evening_reminder_time_str=evening_reminder_time,
+        is_demo_mode=is_demo_mode,
+        demo_minutes=demo_minutes
     )
 
     semester_config = {
@@ -85,7 +92,9 @@ def create_or_update_automation():
         "linked_course_id": linked_course_id,
         "primary_reminder_time": primary_reminder_time,
         "enable_evening_reminder": enable_evening_reminder,
-        "evening_reminder_time": evening_reminder_time
+        "evening_reminder_time": evening_reminder_time,
+        "is_demo_mode": is_demo_mode,
+        "demo_minutes": demo_minutes
     }
 
     syllabus_meta = {
@@ -357,6 +366,54 @@ def delete_automation(notebook_id):
             save_memory_automations()
 
     return jsonify({"success": True, "message": f"Automation for notebook {notebook_id} successfully deleted"}), 200
+
+@automation_bp.route("/api/automations/<notebook_id>/trigger-now", methods=["POST"])
+def trigger_automation_now(notebook_id):
+    """
+    Forces an immediate trigger of the next pending revision reminder for live presentation demo.
+    """
+    db, is_mongo = get_db()
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    found_item = False
+    
+    if is_mongo and db is not None:
+        automations_col = db["course_automations"]
+        auto = automations_col.find_one({"notebook_id": notebook_id})
+        if not auto:
+            return jsonify({"success": False, "error": "Automation not found"}), 404
+        
+        for idx, item in enumerate(auto.get("weekly_schedule", [])):
+            if item.get("status") == "PENDING":
+                past_time = now_utc - datetime.timedelta(seconds=5)
+                automations_col.update_one(
+                    {"_id": auto["_id"]},
+                    {"$set": {
+                        f"weekly_schedule.{idx}.primary_trigger_timestamp": past_time,
+                        f"weekly_schedule.{idx}.actual_trigger_timestamp": past_time,
+                        f"weekly_schedule.{idx}.revision_trigger_timestamp": past_time,
+                    }}
+                )
+                found_item = True
+                break
+    else:
+        for k, auto in memory_automations.items():
+            if auto.get("notebook_id") == notebook_id:
+                for idx, item in enumerate(auto.get("weekly_schedule", [])):
+                    if item.get("status") == "PENDING":
+                        past_time = now_utc - datetime.timedelta(seconds=5)
+                        item["primary_trigger_timestamp"] = past_time
+                        item["actual_trigger_timestamp"] = past_time
+                        item["revision_trigger_timestamp"] = past_time
+                        found_item = True
+                        save_memory_automations()
+                        break
+
+    if not found_item:
+        return jsonify({"success": False, "error": "No pending revision alerts found to trigger"}), 400
+
+    from jobs.notifier import check_and_send_due_notifications
+    check_and_send_due_notifications()
+    return jsonify({"success": True, "message": "Revision reminder triggered immediately!"}), 200
 
 @automation_bp.route("/api/automations/quiz-completed", methods=["POST"])
 def record_quiz_completed():

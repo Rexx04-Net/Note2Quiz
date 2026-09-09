@@ -85,6 +85,31 @@ class TestScheduleCalculator(unittest.TestCase):
         self.assertEqual(first_item["evening_trigger_timestamp"].hour, 21)
         self.assertTrue(first_item["enable_evening_reminder"])
 
+    def test_presentation_demo_mode_schedule(self):
+        topics = [{"week_number": 1, "topic_title": "Intro"}]
+        schedule = calculate_weekly_schedule(
+            semester_start_date_str="2026-09-07",
+            total_weeks=14,
+            class_day="Thursday",  # course is Thursday, but demo is today
+            class_start_time_str="10:00",
+            class_end_time_str="12:00",
+            has_break_week=False,
+            weekly_topics=topics,
+            timezone_str="Asia/Kuala_Lumpur",
+            is_demo_mode=True,
+            demo_minutes=2
+        )
+
+        first_item = schedule[0]
+        now = datetime.datetime.now()
+        trigger = first_item["primary_trigger_timestamp"]
+        # Must be on today's date
+        self.assertEqual(trigger.date(), now.date())
+        # Difference between trigger and now should be roughly 2 minutes (between 1 and 3 mins)
+        diff_secs = (trigger.replace(tzinfo=None) - now).total_seconds()
+        self.assertTrue(0 <= diff_secs <= 180, f"Expected diff ~120s, got {diff_secs}")
+
+
 
 class TestSyllabusParserValidation(unittest.TestCase):
 

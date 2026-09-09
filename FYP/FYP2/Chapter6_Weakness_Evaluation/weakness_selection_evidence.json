@@ -1,0 +1,308 @@
+{
+  "run_id": "05f3182a-fd23-4abc-8ec3-559b4596a36e",
+  "notebook": {
+    "id": "2f6c261b-55d8-40b6-a6fe-072c22faa428",
+    "title": "Chapter 6 Weakness Selection 05f3182a-fd23-4abc-8ec3-559b4596a36e",
+    "user_email": "chapter6-weakness-05f3182a-fd23-4abc-8ec3-559b4596a36e@example.invalid",
+    "sources": []
+  },
+  "production_persistence_endpoint": "POST /save-quiz-result",
+  "production_retrieval_endpoint": "GET /get-notebook-mistakes",
+  "production_generation_endpoint": "POST /generate-weakness-drill",
+  "implemented_distinctness_rule": "Store an incorrect item only when its stripped, non-empty question is not exactly equal to an existing mistake question.",
+  "implemented_insertion_rule": "Each newly distinct mistake is inserted at index 0 of the notebook's embedded mistakes_bank list.",
+  "implemented_selection_rule": "top_mistakes = mistakes[:6]",
+  "submitted_distinct_mistakes": [
+    {
+      "id": "Q1",
+      "question": "Which data structure follows last-in-first-out ordering?",
+      "selected_answer": "Queue",
+      "correct_answer": "Stack",
+      "explanation": "A stack removes the most recently added item first."
+    },
+    {
+      "id": "Q2",
+      "question": "Which data structure follows first-in-first-out ordering?",
+      "selected_answer": "Stack",
+      "correct_answer": "Queue",
+      "explanation": "A queue removes the earliest added item first."
+    },
+    {
+      "id": "Q3",
+      "question": "Which traversal normally uses a queue to explore vertices level by level?",
+      "selected_answer": "Depth-first search",
+      "correct_answer": "Breadth-first search",
+      "explanation": "Breadth-first search uses a queue for level-order exploration."
+    },
+    {
+      "id": "Q4",
+      "question": "Which traversal can use a stack to explore one branch before backtracking?",
+      "selected_answer": "Breadth-first search",
+      "correct_answer": "Depth-first search",
+      "explanation": "Depth-first search uses a stack explicitly or through recursion."
+    },
+    {
+      "id": "Q5",
+      "question": "What prerequisite must hold before ordinary binary search is applied?",
+      "selected_answer": "The input must be random",
+      "correct_answer": "The input must be ordered",
+      "explanation": "Binary search relies on ordered input to discard half of the search interval."
+    },
+    {
+      "id": "Q6",
+      "question": "What must a hash table handle when two keys map to the same bucket?",
+      "selected_answer": "Recursion",
+      "correct_answer": "A collision",
+      "explanation": "Collision handling resolves multiple keys mapped to one bucket."
+    },
+    {
+      "id": "Q7",
+      "question": "In a binary search tree, where are keys smaller than a node normally stored?",
+      "selected_answer": "In the right subtree",
+      "correct_answer": "In the left subtree",
+      "explanation": "The binary-search-tree ordering property places smaller keys on the left."
+    },
+    {
+      "id": "Q8",
+      "question": "Which edge-weight condition is required by the standard Dijkstra algorithm?",
+      "selected_answer": "All edges must be negative",
+      "correct_answer": "Edge weights must be non-negative",
+      "explanation": "Standard Dijkstra shortest-path processing assumes non-negative edge weights."
+    }
+  ],
+  "submitted_breakdown_item_count_including_duplicate": 9,
+  "stored_mistake_count": 8,
+  "stored_mistakes_in_actual_order": [
+    {
+      "correct_answer": "Edge weights must be non-negative",
+      "explanation": "Standard Dijkstra shortest-path processing assumes non-negative edge weights.",
+      "id": "1468c8eb-5f39-4a4f-8cc3-1695fce96671",
+      "question": "Which edge-weight condition is required by the standard Dijkstra algorithm?",
+      "recorded_at": "2026-09-09 09:08",
+      "user_answer": "All edges must be negative"
+    },
+    {
+      "correct_answer": "In the left subtree",
+      "explanation": "The binary-search-tree ordering property places smaller keys on the left.",
+      "id": "ea2a2baf-d76a-4697-8f11-01ee77cac0f2",
+      "question": "In a binary search tree, where are keys smaller than a node normally stored?",
+      "recorded_at": "2026-09-09 09:08",
+      "user_answer": "In the right subtree"
+    },
+    {
+      "correct_answer": "A collision",
+      "explanation": "Collision handling resolves multiple keys mapped to one bucket.",
+      "id": "1063a364-2743-4653-a1b9-28b8cd9f9777",
+      "question": "What must a hash table handle when two keys map to the same bucket?",
+      "recorded_at": "2026-09-09 09:08",
+      "user_answer": "Recursion"
+    },
+    {
+      "correct_answer": "The input must be ordered",
+      "explanation": "Binary search relies on ordered input to discard half of the search interval.",
+      "id": "094ba580-463a-4db2-8822-9e410f59ddf0",
+      "question": "What prerequisite must hold before ordinary binary search is applied?",
+      "recorded_at": "2026-09-09 09:08",
+      "user_answer": "The input must be random"
+    },
+    {
+      "correct_answer": "Depth-first search",
+      "explanation": "Depth-first search uses a stack explicitly or through recursion.",
+      "id": "11a896d3-69bc-4cf0-8903-739cb918915d",
+      "question": "Which traversal can use a stack to explore one branch before backtracking?",
+      "recorded_at": "2026-09-09 09:08",
+      "user_answer": "Breadth-first search"
+    },
+    {
+      "correct_answer": "Breadth-first search",
+      "explanation": "Breadth-first search uses a queue for level-order exploration.",
+      "id": "f4d02377-8164-4687-8183-168fca271cb2",
+      "question": "Which traversal normally uses a queue to explore vertices level by level?",
+      "recorded_at": "2026-09-09 09:08",
+      "user_answer": "Depth-first search"
+    },
+    {
+      "correct_answer": "Queue",
+      "explanation": "A queue removes the earliest added item first.",
+      "id": "8f9ba032-2816-40cd-8d3b-21a5ea4c1606",
+      "question": "Which data structure follows first-in-first-out ordering?",
+      "recorded_at": "2026-09-09 09:08",
+      "user_answer": "Stack"
+    },
+    {
+      "correct_answer": "Stack",
+      "explanation": "A stack removes the most recently added item first.",
+      "id": "45c702d8-295f-4245-84b7-38d1cd97ad12",
+      "question": "Which data structure follows last-in-first-out ordering?",
+      "recorded_at": "2026-09-09 09:08",
+      "user_answer": "Queue"
+    }
+  ],
+  "expected_stored_question_order": [
+    "Which edge-weight condition is required by the standard Dijkstra algorithm?",
+    "In a binary search tree, where are keys smaller than a node normally stored?",
+    "What must a hash table handle when two keys map to the same bucket?",
+    "What prerequisite must hold before ordinary binary search is applied?",
+    "Which traversal can use a stack to explore one branch before backtracking?",
+    "Which traversal normally uses a queue to explore vertices level by level?",
+    "Which data structure follows first-in-first-out ordering?",
+    "Which data structure follows last-in-first-out ordering?"
+  ],
+  "expected_selected_first_six_questions": [
+    "Which edge-weight condition is required by the standard Dijkstra algorithm?",
+    "In a binary search tree, where are keys smaller than a node normally stored?",
+    "What must a hash table handle when two keys map to the same bucket?",
+    "What prerequisite must hold before ordinary binary search is applied?",
+    "Which traversal can use a stack to explore one branch before backtracking?",
+    "Which traversal normally uses a queue to explore vertices level by level?"
+  ],
+  "actual_selected_first_six_questions": [
+    "Which edge-weight condition is required by the standard Dijkstra algorithm?",
+    "In a binary search tree, where are keys smaller than a node normally stored?",
+    "What must a hash table handle when two keys map to the same bucket?",
+    "What prerequisite must hold before ordinary binary search is applied?",
+    "Which traversal can use a stack to explore one branch before backtracking?",
+    "Which traversal normally uses a queue to explore vertices level by level?"
+  ],
+  "storage_result": "PASS",
+  "duplicate_handling_result": "PASS",
+  "selection_logic_result": "PASS",
+  "generation_status": "PASS_USER_VERIFIED",
+  "generated_drill_result": {
+    "generated_question_count": 6,
+    "question_texts_available_in_this_record": false,
+    "response_evidence": {
+      "has_mistakes": true,
+      "mistakes_count": 8,
+      "is_weakness_drill": true,
+      "tool_type": "weakness_drill",
+      "title": "Weakness Drill (6 Qs)",
+      "success": true
+    },
+    "verified_concept_mappings": [
+      {
+        "concept": "BST left-subtree ordering",
+        "result": "PASS"
+      },
+      {
+        "concept": "Dijkstra non-negative edge requirement",
+        "result": "PASS"
+      },
+      {
+        "concept": "Hash-table collision handling",
+        "result": "PASS"
+      },
+      {
+        "concept": "Binary-search ordered-input prerequisite",
+        "result": "PASS"
+      },
+      {
+        "concept": "BFS with Queue",
+        "result": "PASS"
+      },
+      {
+        "concept": "DFS with Stack",
+        "result": "PASS"
+      }
+    ]
+  },
+  "contextual_relevance_result": "PASS_USER_VERIFIED",
+  "manual_generation_request_file": "C:\\src\\FYP\\FYP2\\Chapter6_Weakness_Evaluation\\manual_generate_weakness_drill_request.json",
+  "interpretation_limit": "Selection is positional first-six selection. It is not frequency-weighted, recency-scored, or adaptively scored.",
+  "raw_endpoint_statuses": {
+    "create_notebook": 200,
+    "save_quiz_result": 200,
+    "get_notebook_mistakes": 200
+  },
+  "save_quiz_result_response": {
+    "result": {
+      "breakdown": [
+        {
+          "correct_answer": "Stack",
+          "explanation": "A stack removes the most recently added item first.",
+          "is_correct": false,
+          "question": "Which data structure follows last-in-first-out ordering?",
+          "selected_answer": "Queue"
+        },
+        {
+          "correct_answer": "Queue",
+          "explanation": "A queue removes the earliest added item first.",
+          "is_correct": false,
+          "question": "Which data structure follows first-in-first-out ordering?",
+          "selected_answer": "Stack"
+        },
+        {
+          "correct_answer": "Breadth-first search",
+          "explanation": "Breadth-first search uses a queue for level-order exploration.",
+          "is_correct": false,
+          "question": "Which traversal normally uses a queue to explore vertices level by level?",
+          "selected_answer": "Depth-first search"
+        },
+        {
+          "correct_answer": "Depth-first search",
+          "explanation": "Depth-first search uses a stack explicitly or through recursion.",
+          "is_correct": false,
+          "question": "Which traversal can use a stack to explore one branch before backtracking?",
+          "selected_answer": "Breadth-first search"
+        },
+        {
+          "correct_answer": "The input must be ordered",
+          "explanation": "Binary search relies on ordered input to discard half of the search interval.",
+          "is_correct": false,
+          "question": "What prerequisite must hold before ordinary binary search is applied?",
+          "selected_answer": "The input must be random"
+        },
+        {
+          "correct_answer": "A collision",
+          "explanation": "Collision handling resolves multiple keys mapped to one bucket.",
+          "is_correct": false,
+          "question": "What must a hash table handle when two keys map to the same bucket?",
+          "selected_answer": "Recursion"
+        },
+        {
+          "correct_answer": "In the left subtree",
+          "explanation": "The binary-search-tree ordering property places smaller keys on the left.",
+          "is_correct": false,
+          "question": "In a binary search tree, where are keys smaller than a node normally stored?",
+          "selected_answer": "In the right subtree"
+        },
+        {
+          "correct_answer": "Edge weights must be non-negative",
+          "explanation": "Standard Dijkstra shortest-path processing assumes non-negative edge weights.",
+          "is_correct": false,
+          "question": "Which edge-weight condition is required by the standard Dijkstra algorithm?",
+          "selected_answer": "All edges must be negative"
+        },
+        {
+          "correct_answer": "Stack",
+          "explanation": "A stack removes the most recently added item first.",
+          "is_correct": false,
+          "question": "Which data structure follows last-in-first-out ordering?",
+          "selected_answer": "Queue"
+        }
+      ],
+      "correct_answers": 0,
+      "id": "6ec347d5-deba-42ad-a7c4-69e1bfdc279c",
+      "percentage": 0,
+      "played_at": "2026-09-09 09:08",
+      "quiz_data": [],
+      "quiz_title": "Chapter 6 Controlled Weakness Selection Setup",
+      "score": 0,
+      "total_questions": 8
+    },
+    "success": true
+  },
+  "final_results": {
+    "mistake_persistence": "PASS",
+    "exact_duplicate_handling": "PASS",
+    "first_six_selection_rule": "PASS",
+    "weakness_drill_generation": "PASS",
+    "contextual_relevance": "PASS",
+    "overall_objective_3_weakness_drill_workflow": "PASS"
+  },
+  "reporting_limits": [
+    "This is contextual relevance verification, not AI accuracy measurement.",
+    "Do not claim frequency-weighted, recency-weighted, or adaptive mistake ranking.",
+    "Do not rewrite Chapter 6 until explicitly requested."
+  ]
+}

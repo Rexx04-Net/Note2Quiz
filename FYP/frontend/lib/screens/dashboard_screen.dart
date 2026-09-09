@@ -1021,8 +1021,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final scheme = Theme.of(context).colorScheme;
     final settingsController = AppSettingsScope.of(context);
 
-    return Scaffold(
-      backgroundColor: colors.background,
+    return Title(
+      title: 'Note2Quiz',
+      color: const Color(0xFF0062FE),
+      child: Scaffold(
+        backgroundColor: colors.background,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _joinLiveGame,
         backgroundColor: scheme.secondary,
@@ -1384,8 +1387,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildStatCard({
     required IconData icon,

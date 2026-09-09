@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import 'dashboard_screen.dart';
@@ -41,6 +42,12 @@ class _LobbyScreenState extends State<LobbyScreen> with TickerProviderStateMixin
       CurvedAnimation(parent: _heroController, curve: Curves.easeOutCubic),
     );
     _heroController.forward();
+    SystemChrome.setApplicationSwitcherDescription(
+      const ApplicationSwitcherDescription(
+        label: 'Note2Quiz',
+        primaryColor: 0xFF0062FE,
+      ),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => _startAutoScroll());
   }
 
@@ -92,9 +99,12 @@ class _LobbyScreenState extends State<LobbyScreen> with TickerProviderStateMixin
   Widget build(BuildContext context) {
     final colors = context.appColors;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: SingleChildScrollView(
+    return Title(
+      title: 'Note2Quiz',
+      color: const Color(0xFF0062FE),
+      child: Scaffold(
+        backgroundColor: colors.background,
+        body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -145,8 +155,9 @@ class _LobbyScreenState extends State<LobbyScreen> with TickerProviderStateMixin
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   // ---------------------------------------------------------------------------
   // Top Navigation Bar

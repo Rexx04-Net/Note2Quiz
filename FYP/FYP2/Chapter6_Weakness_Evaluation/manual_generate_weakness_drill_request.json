@@ -1,0 +1,12 @@
+{
+  "method": "POST",
+  "url": "http://127.0.0.1:5000/generate-weakness-drill",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "notebook_id": "2f6c261b-55d8-40b6-a6fe-072c22faa428",
+    "output_language": "English",
+    "sources": []
+  }
+}

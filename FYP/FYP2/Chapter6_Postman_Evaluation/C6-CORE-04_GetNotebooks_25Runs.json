@@ -1,0 +1,179 @@
+{
+	"id": "2563478e-5fe5-4ee6-a851-ad4c9fbed2f9",
+	"name": "Note2Quiz Chapter 6 Evaluation",
+	"timestamp": "2026-09-08T06:56:56.951Z",
+	"collection_id": "51277968-769c456f-db72-4396-b56f-af8f4fb1489c",
+	"folder_id": "51277968-f3a53d1c-afbb-48ec-af6d-78a9498d3740",
+	"environment_id": "51277968-0c2dd4f3-d942-4a97-91cf-2d30ddbf27fa",
+	"totalPass": 50,
+	"delay": "100",
+	"persist": true,
+	"status": "finished",
+	"startedAt": "2026-09-08T06:56:50.384Z",
+	"totalFail": 0,
+	"results": [
+		{
+			"id": "84f99d2b-8330-4b19-a001-57daf675d995",
+			"name": "C6-CORE-04 - Get Notebooks (25-run candidate)",
+			"url": "http://127.0.0.1:5000/get-notebooks",
+			"time": 31,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {
+				"HTTP 200": true,
+				"Response is an array containing the evaluation notebook": true
+			},
+			"testPassFailCounts": {
+				"HTTP 200": {
+					"pass": 25,
+					"fail": 0
+				},
+				"Response is an array containing the evaluation notebook": {
+					"pass": 25,
+					"fail": 0
+				}
+			},
+			"times": [
+				44,
+				10,
+				48,
+				8,
+				9,
+				7,
+				8,
+				7,
+				6,
+				9,
+				8,
+				7,
+				7,
+				7,
+				7,
+				6,
+				8,
+				8,
+				7,
+				7,
+				6,
+				8,
+				6,
+				6,
+				31
+			],
+			"allTests": [
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				},
+				{
+					"HTTP 200": true,
+					"Response is an array containing the evaluation notebook": true
+				}
+			]
+		}
+	],
+	"count": 25,
+	"totalTime": 285,
+	"collection": {
+		"requests": [
+			{
+				"id": "84f99d2b-8330-4b19-a001-57daf675d995",
+				"method": "POST"
+			}
+		]
+	}
+}

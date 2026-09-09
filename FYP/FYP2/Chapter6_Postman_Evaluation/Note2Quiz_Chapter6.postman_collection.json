@@ -1,0 +1,1931 @@
+{
+  "info": {
+    "_postman_id": "9ce063ca-2c38-4ddc-810a-a110393a7833",
+    "name": "Note2Quiz Chapter 6 Evaluation",
+    "description": "Source-derived Chapter 6 technical evaluation suite. Import Note2Quiz Local and select it before running. Start with C6-CORE-01 only. Do not run the entire collection at once: file-backed requests require manual file selection, and the AI folder consumes Gemini quota. A generated collection is not evidence of passing; retain the Runner export and raw responses from actual execution.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Core API Functional & Response Time",
+      "description": "Run setup once, then use 25 iterations for the labelled read-only candidates.",
+      "item": [
+        {
+          "name": "C6-CORE-01 - Backend Health (FIRST SAFE TEST)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": []
+            },
+            "description": "Read-only connectivity check. Run this first by itself. It does not call Gemini or write application data. Planned response-time run count after setup review: 25.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (Number(pm.info.iteration || 0) === 0) pm.collectionVariables.unset('metric_core_health');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.text();",
+                  "const ok = pm.response.code === 200 && body.includes('Note2Quiz Backend is Running');",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Backend health text is returned', () => pm.expect(body).to.include('Note2Quiz Backend is Running'));",
+                  "",
+                  "function recordMetric(key, success) {",
+                  "  let metric;",
+                  "  try {",
+                  "    metric = JSON.parse(pm.collectionVariables.get(key) || '{}');",
+                  "  } catch (e) {",
+                  "    metric = {};",
+                  "  }",
+                  "  metric.runs = (metric.runs || 0) + 1;",
+                  "  metric.successful_requests = (metric.successful_requests || 0) + (success ? 1 : 0);",
+                  "  metric.failed_requests = metric.runs - metric.successful_requests;",
+                  "  metric.times_ms = Array.isArray(metric.times_ms) ? metric.times_ms : [];",
+                  "  metric.times_ms.push(pm.response.responseTime);",
+                  "  const sorted = metric.times_ms.slice().sort((a, b) => a - b);",
+                  "  metric.success_rate_percent = Number((100 * metric.successful_requests / metric.runs).toFixed(2));",
+                  "  metric.mean_ms = Number((metric.times_ms.reduce((a, b) => a + b, 0) / metric.runs).toFixed(2));",
+                  "  metric.min_ms = sorted[0];",
+                  "  metric.max_ms = sorted[sorted.length - 1];",
+                  "  metric.p95_ms = sorted[Math.max(0, Math.ceil(0.95 * sorted.length) - 1)];",
+                  "  pm.collectionVariables.set(key, JSON.stringify(metric));",
+                  "  console.log('CHAPTER6_METRIC ' + key + ' ' + JSON.stringify(metric));",
+                  "}",
+                  "recordMetric('metric_core_health', ok);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-CORE-02 - Setup: Create Evaluation Notebook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/create-notebook",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "create-notebook"
+              ]
+            },
+            "description": "Creates a disposable evaluation notebook and stores its generated id for later requests. This writes to MongoDB or the implemented local JSON fallback.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"title\": \"Chapter 6 Evaluation {{run_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const runId = pm.variables.replaceIn('{{$guid}}');",
+                  "pm.collectionVariables.set('run_id', runId);",
+                  "pm.collectionVariables.set('test_email', 'chapter6-' + runId + '@example.invalid');",
+                  "pm.collectionVariables.set('core_mistake_question', 'Chapter 6 controlled mistake ' + runId);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Notebook id and empty sources exist', () => {",
+                  "  pm.expect(body.id).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.sources).to.be.an('array');",
+                  "});",
+                  "pm.collectionVariables.set('core_notebook_id', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-CORE-03 - Setup: Add Plain-Text Source",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/add-source",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "add-source"
+              ]
+            },
+            "description": "Adds controlled plain text to the evaluation notebook. The source is long enough for the generation context check and stores the returned source id.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notebook_id\": \"{{core_notebook_id}}\",\n  \"email\": \"{{test_email}}\",\n  \"type\": \"text\",\n  \"title\": \"Chapter 6 Controlled Source\",\n  \"content\": \"A stack is a last-in-first-out data structure. Push adds an item to the top and pop removes the top item. A queue is first-in-first-out. Breadth-first search commonly uses a queue, while depth-first search can use a stack. This controlled text is identified by {{run_id}}.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Stored source fields exist', () => {",
+                  "  pm.expect(body.id).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.type).to.eql('text');",
+                  "  pm.expect(body.content).to.include('last-in-first-out');",
+                  "});",
+                  "pm.collectionVariables.set('core_source_id', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-CORE-04 - Get Notebooks (25-run candidate)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/get-notebooks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "get-notebooks"
+              ]
+            },
+            "description": "Representative non-AI read request for functional and response-time evaluation. Run 25 iterations only after the setup requests have succeeded.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (Number(pm.info.iteration || 0) === 0) pm.collectionVariables.unset('metric_get_notebooks');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const found = Array.isArray(body) && body.some(n => n.id === pm.collectionVariables.get('core_notebook_id'));",
+                  "const ok = pm.response.code === 200 && found;",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is an array containing the evaluation notebook', () => {",
+                  "  pm.expect(body).to.be.an('array');",
+                  "  pm.expect(found).to.eql(true);",
+                  "});",
+                  "",
+                  "function recordMetric(key, success) {",
+                  "  let metric;",
+                  "  try {",
+                  "    metric = JSON.parse(pm.collectionVariables.get(key) || '{}');",
+                  "  } catch (e) {",
+                  "    metric = {};",
+                  "  }",
+                  "  metric.runs = (metric.runs || 0) + 1;",
+                  "  metric.successful_requests = (metric.successful_requests || 0) + (success ? 1 : 0);",
+                  "  metric.failed_requests = metric.runs - metric.successful_requests;",
+                  "  metric.times_ms = Array.isArray(metric.times_ms) ? metric.times_ms : [];",
+                  "  metric.times_ms.push(pm.response.responseTime);",
+                  "  const sorted = metric.times_ms.slice().sort((a, b) => a - b);",
+                  "  metric.success_rate_percent = Number((100 * metric.successful_requests / metric.runs).toFixed(2));",
+                  "  metric.mean_ms = Number((metric.times_ms.reduce((a, b) => a + b, 0) / metric.runs).toFixed(2));",
+                  "  metric.min_ms = sorted[0];",
+                  "  metric.max_ms = sorted[sorted.length - 1];",
+                  "  metric.p95_ms = sorted[Math.max(0, Math.ceil(0.95 * sorted.length) - 1)];",
+                  "  pm.collectionVariables.set(key, JSON.stringify(metric));",
+                  "  console.log('CHAPTER6_METRIC ' + key + ' ' + JSON.stringify(metric));",
+                  "}",
+                  "recordMetric('metric_get_notebooks', ok);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-CORE-05 - Get Notebook History (25-run candidate)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/get-notebook-history",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "get-notebook-history"
+              ]
+            },
+            "description": "Representative non-AI notebook read request. The implemented empty-history shape contains history and quiz_results arrays.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notebook_id\": \"{{core_notebook_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (Number(pm.info.iteration || 0) === 0) pm.collectionVariables.unset('metric_get_history');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const ok = pm.response.code === 200 && Array.isArray(body.history) && Array.isArray(body.quiz_results);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('History arrays exist', () => {",
+                  "  pm.expect(body.history).to.be.an('array');",
+                  "  pm.expect(body.quiz_results).to.be.an('array');",
+                  "});",
+                  "",
+                  "function recordMetric(key, success) {",
+                  "  let metric;",
+                  "  try {",
+                  "    metric = JSON.parse(pm.collectionVariables.get(key) || '{}');",
+                  "  } catch (e) {",
+                  "    metric = {};",
+                  "  }",
+                  "  metric.runs = (metric.runs || 0) + 1;",
+                  "  metric.successful_requests = (metric.successful_requests || 0) + (success ? 1 : 0);",
+                  "  metric.failed_requests = metric.runs - metric.successful_requests;",
+                  "  metric.times_ms = Array.isArray(metric.times_ms) ? metric.times_ms : [];",
+                  "  metric.times_ms.push(pm.response.responseTime);",
+                  "  const sorted = metric.times_ms.slice().sort((a, b) => a - b);",
+                  "  metric.success_rate_percent = Number((100 * metric.successful_requests / metric.runs).toFixed(2));",
+                  "  metric.mean_ms = Number((metric.times_ms.reduce((a, b) => a + b, 0) / metric.runs).toFixed(2));",
+                  "  metric.min_ms = sorted[0];",
+                  "  metric.max_ms = sorted[sorted.length - 1];",
+                  "  metric.p95_ms = sorted[Math.max(0, Math.ceil(0.95 * sorted.length) - 1)];",
+                  "  pm.collectionVariables.set(key, JSON.stringify(metric));",
+                  "  console.log('CHAPTER6_METRIC ' + key + ' ' + JSON.stringify(metric));",
+                  "}",
+                  "recordMetric('metric_get_history', ok);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-CORE-06 - Get Notebook Mistakes (25-run candidate)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/get-notebook-mistakes?notebook_id={{core_notebook_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "get-notebook-mistakes"
+              ],
+              "query": [
+                {
+                  "key": "notebook_id",
+                  "value": "{{core_notebook_id}}"
+                }
+              ]
+            },
+            "description": "Representative non-AI read request for Objective 3. It returns mistakes_count and mistakes even when the bank is empty.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (Number(pm.info.iteration || 0) === 0) pm.collectionVariables.unset('metric_get_mistakes');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const ok = pm.response.code === 200 && Number.isInteger(body.mistakes_count) && Array.isArray(body.mistakes);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Mistake-bank response shape exists', () => {",
+                  "  pm.expect(body.mistakes_count).to.be.a('number');",
+                  "  pm.expect(body.mistakes).to.be.an('array');",
+                  "});",
+                  "",
+                  "function recordMetric(key, success) {",
+                  "  let metric;",
+                  "  try {",
+                  "    metric = JSON.parse(pm.collectionVariables.get(key) || '{}');",
+                  "  } catch (e) {",
+                  "    metric = {};",
+                  "  }",
+                  "  metric.runs = (metric.runs || 0) + 1;",
+                  "  metric.successful_requests = (metric.successful_requests || 0) + (success ? 1 : 0);",
+                  "  metric.failed_requests = metric.runs - metric.successful_requests;",
+                  "  metric.times_ms = Array.isArray(metric.times_ms) ? metric.times_ms : [];",
+                  "  metric.times_ms.push(pm.response.responseTime);",
+                  "  const sorted = metric.times_ms.slice().sort((a, b) => a - b);",
+                  "  metric.success_rate_percent = Number((100 * metric.successful_requests / metric.runs).toFixed(2));",
+                  "  metric.mean_ms = Number((metric.times_ms.reduce((a, b) => a + b, 0) / metric.runs).toFixed(2));",
+                  "  metric.min_ms = sorted[0];",
+                  "  metric.max_ms = sorted[sorted.length - 1];",
+                  "  metric.p95_ms = sorted[Math.max(0, Math.ceil(0.95 * sorted.length) - 1)];",
+                  "  pm.collectionVariables.set(key, JSON.stringify(metric));",
+                  "  console.log('CHAPTER6_METRIC ' + key + ' ' + JSON.stringify(metric));",
+                  "}",
+                  "recordMetric('metric_get_mistakes', ok);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-CORE-07 - Record Controlled Quiz Result and Mistake",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/save-quiz-result",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "save-quiz-result"
+              ]
+            },
+            "description": "Writes one controlled incorrect-answer record into the notebook's embedded mistakes_bank. Run once for the functional check, not as a response-time loop.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notebook_id\": \"{{core_notebook_id}}\",\n  \"score\": 0,\n  \"correct_answers\": 0,\n  \"total_questions\": 1,\n  \"percentage\": 0,\n  \"quiz_title\": \"Chapter 6 Controlled Quiz\",\n  \"quiz_data\": [\n    {\n      \"question\": \"{{core_mistake_question}}\",\n      \"options\": [\n        \"Stack\",\n        \"Queue\",\n        \"Tree\",\n        \"Graph\"\n      ],\n      \"answer\": \"Stack\",\n      \"explanation\": \"A stack follows LIFO.\"\n    }\n  ],\n  \"breakdown\": [\n    {\n      \"question\": \"{{core_mistake_question}}\",\n      \"selected_answer\": \"Queue\",\n      \"correct_answer\": \"Stack\",\n      \"is_correct\": false,\n      \"explanation\": \"A stack follows LIFO.\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Quiz result is stored', () => {",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "  pm.expect(body.result).to.be.an('object');",
+                  "  pm.expect(body.result.id).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.result.percentage).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-CORE-08 - Verify Controlled Mistake Persistence",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/get-notebook-mistakes?notebook_id={{core_notebook_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "get-notebook-mistakes"
+              ],
+              "query": [
+                {
+                  "key": "notebook_id",
+                  "value": "{{core_notebook_id}}"
+                }
+              ]
+            },
+            "description": "Confirms that the exact controlled question is present after C6-CORE-07. This verifies persistence behaviour only; it does not measure learning effectiveness.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const target = pm.collectionVariables.get('core_mistake_question');",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Controlled mistake is returned', () => {",
+                  "  pm.expect(body.mistakes).to.be.an('array');",
+                  "  pm.expect(body.mistakes.some(m => m.question === target)).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - AI Generation Evaluation",
+      "description": "Run this folder with exactly 5 iterations only when Gemini quota use is intended. Each iteration creates a unique source to force fresh cache misses. The final request is a cache-hit diagnostic and is excluded from fresh metrics.",
+      "item": [
+        {
+          "name": "C6-AI-00 - Fresh Run Setup: Create Unique Notebook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/create-notebook",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "create-notebook"
+              ]
+            },
+            "description": "Run the entire AI folder with exactly 5 Runner iterations. A unique notebook and source are created per iteration so flashcard, mind-map and briefing measurements are fresh cache misses.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ai_test_email}}\",\n  \"title\": \"Chapter 6 AI Fresh {{ai_run_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const runId = pm.variables.replaceIn('{{$guid}}');",
+                  "pm.collectionVariables.set('ai_run_id', runId);",
+                  "pm.collectionVariables.set('ai_test_email', 'chapter6-ai-' + runId + '@example.invalid');",
+                  "if (Number(pm.info.iteration || 0) === 0) {",
+                  "  ['metric_ai_quiz_fresh','metric_ai_flashcard_fresh','metric_ai_mindmap_fresh','metric_ai_briefing_fresh'].forEach(k => pm.collectionVariables.unset(k));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('Fresh AI notebook created', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(body.id).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.collectionVariables.set('ai_notebook_id', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-AI-01 - Fresh Run Setup: Add Unique Source",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/add-source",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "add-source"
+              ]
+            },
+            "description": "Adds unique controlled text for the current AI iteration; the unique marker changes the cache fingerprint.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notebook_id\": \"{{ai_notebook_id}}\",\n  \"email\": \"{{ai_test_email}}\",\n  \"type\": \"text\",\n  \"title\": \"Data Structures {{ai_run_id}}\",\n  \"content\": \"A stack is a linear last-in-first-out structure supporting push, pop and peek. A queue is a first-in-first-out structure supporting enqueue and dequeue. Breadth-first search explores graph vertices level by level with a queue. Depth-first search explores along a branch and can be implemented with a stack. Hash tables map keys to buckets and require collision handling. Binary search requires ordered input and repeatedly halves the search interval. Unique evaluation marker: {{ai_run_id}}.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('Unique AI source stored', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(body.id).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.collectionVariables.set('ai_source_id', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-AI-02 - FRESH Quiz Generation (5 runs)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generate-studio-item",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "generate-studio-item"
+              ]
+            },
+            "description": "Gemini quota request. Quiz bypasses cache retrieval in the implementation. Run only through the five-iteration AI folder workflow.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notebook_id\": \"{{ai_notebook_id}}\",\n  \"user_email\": \"{{ai_test_email}}\",\n  \"tool_type\": \"quiz\",\n  \"difficulty\": \"Standard\",\n  \"output_language\": \"English\",\n  \"selected_source_ids\": [\n    \"{{ai_source_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body = {};",
+                  "try { body = pm.response.json(); } catch (e) {}",
+                  "const valid = body.type === 'json' && Array.isArray(body.data) && body.data.length > 0 && body.data.every(q =>",
+                  "  typeof q.question === 'string' && Array.isArray(q.options) && q.options.length === 4 &&",
+                  "  typeof q.answer === 'string' && q.options.includes(q.answer) && typeof q.explanation === 'string'",
+                  ");",
+                  "const ok = pm.response.code === 200 && valid && body.cached !== true;",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Implemented quiz JSON structure is valid', () => pm.expect(valid).to.eql(true));",
+                  "pm.test('Response is not marked cached', () => pm.expect(body.cached).not.to.eql(true));",
+                  "",
+                  "function recordMetric(key, success) {",
+                  "  let metric;",
+                  "  try {",
+                  "    metric = JSON.parse(pm.collectionVariables.get(key) || '{}');",
+                  "  } catch (e) {",
+                  "    metric = {};",
+                  "  }",
+                  "  metric.runs = (metric.runs || 0) + 1;",
+                  "  metric.successful_requests = (metric.successful_requests || 0) + (success ? 1 : 0);",
+                  "  metric.failed_requests = metric.runs - metric.successful_requests;",
+                  "  metric.times_ms = Array.isArray(metric.times_ms) ? metric.times_ms : [];",
+                  "  metric.times_ms.push(pm.response.responseTime);",
+                  "  const sorted = metric.times_ms.slice().sort((a, b) => a - b);",
+                  "  metric.success_rate_percent = Number((100 * metric.successful_requests / metric.runs).toFixed(2));",
+                  "  metric.mean_ms = Number((metric.times_ms.reduce((a, b) => a + b, 0) / metric.runs).toFixed(2));",
+                  "  metric.min_ms = sorted[0];",
+                  "  metric.max_ms = sorted[sorted.length - 1];",
+                  "  metric.p95_ms = sorted[Math.max(0, Math.ceil(0.95 * sorted.length) - 1)];",
+                  "  pm.collectionVariables.set(key, JSON.stringify(metric));",
+                  "  console.log('CHAPTER6_METRIC ' + key + ' ' + JSON.stringify(metric));",
+                  "}",
+                  "recordMetric('metric_ai_quiz_fresh', ok);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-AI-03 - FRESH Flashcard Generation (5 runs)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generate-studio-item",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "generate-studio-item"
+              ]
+            },
+            "description": "Gemini quota request. The unique source created for each iteration makes this a cache miss; cached responses are rejected from the fresh metric.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notebook_id\": \"{{ai_notebook_id}}\",\n  \"user_email\": \"{{ai_test_email}}\",\n  \"tool_type\": \"flashcard\",\n  \"difficulty\": \"Standard\",\n  \"output_language\": \"English\",\n  \"selected_source_ids\": [\n    \"{{ai_source_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body = {};",
+                  "try { body = pm.response.json(); } catch (e) {}",
+                  "const valid = body.type === 'json' && Array.isArray(body.data) && body.data.length > 0 && body.data.every(card =>",
+                  "  typeof card.front === 'string' && card.front.length > 0 && typeof card.back === 'string' && card.back.length > 0",
+                  ");",
+                  "const fresh = body.cached !== true && (!body.history_item || body.history_item.cached !== true);",
+                  "const ok = pm.response.code === 200 && valid && fresh;",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Implemented flashcard JSON structure is valid', () => pm.expect(valid).to.eql(true));",
+                  "pm.test('Fresh response is not marked cached', () => pm.expect(fresh).to.eql(true));",
+                  "",
+                  "function recordMetric(key, success) {",
+                  "  let metric;",
+                  "  try {",
+                  "    metric = JSON.parse(pm.collectionVariables.get(key) || '{}');",
+                  "  } catch (e) {",
+                  "    metric = {};",
+                  "  }",
+                  "  metric.runs = (metric.runs || 0) + 1;",
+                  "  metric.successful_requests = (metric.successful_requests || 0) + (success ? 1 : 0);",
+                  "  metric.failed_requests = metric.runs - metric.successful_requests;",
+                  "  metric.times_ms = Array.isArray(metric.times_ms) ? metric.times_ms : [];",
+                  "  metric.times_ms.push(pm.response.responseTime);",
+                  "  const sorted = metric.times_ms.slice().sort((a, b) => a - b);",
+                  "  metric.success_rate_percent = Number((100 * metric.successful_requests / metric.runs).toFixed(2));",
+                  "  metric.mean_ms = Number((metric.times_ms.reduce((a, b) => a + b, 0) / metric.runs).toFixed(2));",
+                  "  metric.min_ms = sorted[0];",
+                  "  metric.max_ms = sorted[sorted.length - 1];",
+                  "  metric.p95_ms = sorted[Math.max(0, Math.ceil(0.95 * sorted.length) - 1)];",
+                  "  pm.collectionVariables.set(key, JSON.stringify(metric));",
+                  "  console.log('CHAPTER6_METRIC ' + key + ' ' + JSON.stringify(metric));",
+                  "}",
+                  "recordMetric('metric_ai_flashcard_fresh', ok);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-AI-04 - FRESH Mind Map Generation (5 runs)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generate-studio-item",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "generate-studio-item"
+              ]
+            },
+            "description": "Gemini quota request. Validates the implemented root title/children structure and excludes a cache hit from fresh latency statistics.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notebook_id\": \"{{ai_notebook_id}}\",\n  \"user_email\": \"{{ai_test_email}}\",\n  \"tool_type\": \"mindmap\",\n  \"difficulty\": \"Standard\",\n  \"output_language\": \"English\",\n  \"selected_source_ids\": [\n    \"{{ai_source_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body = {};",
+                  "try { body = pm.response.json(); } catch (e) {}",
+                  "const valid = body.type === 'json' && body.data && typeof body.data === 'object' &&",
+                  "  typeof body.data.title === 'string' && Array.isArray(body.data.children);",
+                  "const fresh = body.cached !== true && (!body.history_item || body.history_item.cached !== true);",
+                  "const ok = pm.response.code === 200 && valid && fresh;",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Implemented mind-map JSON structure is valid', () => pm.expect(valid).to.eql(true));",
+                  "pm.test('Fresh response is not marked cached', () => pm.expect(fresh).to.eql(true));",
+                  "",
+                  "function recordMetric(key, success) {",
+                  "  let metric;",
+                  "  try {",
+                  "    metric = JSON.parse(pm.collectionVariables.get(key) || '{}');",
+                  "  } catch (e) {",
+                  "    metric = {};",
+                  "  }",
+                  "  metric.runs = (metric.runs || 0) + 1;",
+                  "  metric.successful_requests = (metric.successful_requests || 0) + (success ? 1 : 0);",
+                  "  metric.failed_requests = metric.runs - metric.successful_requests;",
+                  "  metric.times_ms = Array.isArray(metric.times_ms) ? metric.times_ms : [];",
+                  "  metric.times_ms.push(pm.response.responseTime);",
+                  "  const sorted = metric.times_ms.slice().sort((a, b) => a - b);",
+                  "  metric.success_rate_percent = Number((100 * metric.successful_requests / metric.runs).toFixed(2));",
+                  "  metric.mean_ms = Number((metric.times_ms.reduce((a, b) => a + b, 0) / metric.runs).toFixed(2));",
+                  "  metric.min_ms = sorted[0];",
+                  "  metric.max_ms = sorted[sorted.length - 1];",
+                  "  metric.p95_ms = sorted[Math.max(0, Math.ceil(0.95 * sorted.length) - 1)];",
+                  "  pm.collectionVariables.set(key, JSON.stringify(metric));",
+                  "  console.log('CHAPTER6_METRIC ' + key + ' ' + JSON.stringify(metric));",
+                  "}",
+                  "recordMetric('metric_ai_mindmap_fresh', ok);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-AI-05 - FRESH Briefing SSE Completion (5 runs; NOT TTFT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/stream-studio-item",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stream-studio-item"
+              ]
+            },
+            "description": "Gemini quota request. Postman records end-to-end completion time only. It must not be reported as first-token/first-chunk timing.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notebook_id\": \"{{ai_notebook_id}}\",\n  \"user_email\": \"{{ai_test_email}}\",\n  \"tool_type\": \"report\",\n  \"difficulty\": \"Standard\",\n  \"output_language\": \"English\",\n  \"selected_source_ids\": [\n    \"{{ai_source_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const contentType = pm.response.headers.get('Content-Type') || '';",
+                  "const events = pm.response.text().split(/\\r?\\n/).filter(line => line.startsWith('data:')).map(line => {",
+                  "  try { return JSON.parse(line.slice(5).trim()); } catch (e) { return {parse_error: true}; }",
+                  "});",
+                  "const hasChunk = events.some(e => typeof e.chunk === 'string' && e.chunk.length > 0);",
+                  "const done = events.find(e => e.done === true);",
+                  "const noError = !events.some(e => e.error || e.parse_error);",
+                  "const fresh = Boolean(done) && done.cached !== true;",
+                  "const ok = pm.response.code === 200 && contentType.includes('text/event-stream') && hasChunk && noError && fresh;",
+                  "pm.test('HTTP 200 with event-stream content type', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(contentType).to.include('text/event-stream');",
+                  "});",
+                  "pm.test('At least one application chunk and a fresh completion event exist', () => {",
+                  "  pm.expect(hasChunk).to.eql(true);",
+                  "  pm.expect(Boolean(done)).to.eql(true);",
+                  "  pm.expect(noError).to.eql(true);",
+                  "  pm.expect(fresh).to.eql(true);",
+                  "});",
+                  "console.log('SSE first-chunk timing requires separate Chrome DevTools or backend instrumentation.');",
+                  "",
+                  "function recordMetric(key, success) {",
+                  "  let metric;",
+                  "  try {",
+                  "    metric = JSON.parse(pm.collectionVariables.get(key) || '{}');",
+                  "  } catch (e) {",
+                  "    metric = {};",
+                  "  }",
+                  "  metric.runs = (metric.runs || 0) + 1;",
+                  "  metric.successful_requests = (metric.successful_requests || 0) + (success ? 1 : 0);",
+                  "  metric.failed_requests = metric.runs - metric.successful_requests;",
+                  "  metric.times_ms = Array.isArray(metric.times_ms) ? metric.times_ms : [];",
+                  "  metric.times_ms.push(pm.response.responseTime);",
+                  "  const sorted = metric.times_ms.slice().sort((a, b) => a - b);",
+                  "  metric.success_rate_percent = Number((100 * metric.successful_requests / metric.runs).toFixed(2));",
+                  "  metric.mean_ms = Number((metric.times_ms.reduce((a, b) => a + b, 0) / metric.runs).toFixed(2));",
+                  "  metric.min_ms = sorted[0];",
+                  "  metric.max_ms = sorted[sorted.length - 1];",
+                  "  metric.p95_ms = sorted[Math.max(0, Math.ceil(0.95 * sorted.length) - 1)];",
+                  "  pm.collectionVariables.set(key, JSON.stringify(metric));",
+                  "  console.log('CHAPTER6_METRIC ' + key + ' ' + JSON.stringify(metric));",
+                  "}",
+                  "recordMetric('metric_ai_briefing_fresh', ok);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-AI-06 - CACHE HIT Diagnostic: Repeat Flashcards (exclude from fresh latency)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generate-studio-item",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "generate-studio-item"
+              ]
+            },
+            "description": "Repeats the flashcard request with the same cache fingerprint. The test requires cached=true. Do not include its response time in fresh Gemini generation results.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notebook_id\": \"{{ai_notebook_id}}\",\n  \"user_email\": \"{{ai_test_email}}\",\n  \"tool_type\": \"flashcard\",\n  \"difficulty\": \"Standard\",\n  \"output_language\": \"English\",\n  \"selected_source_ids\": [\n    \"{{ai_source_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is explicitly a cache hit', () => {",
+                  "  pm.expect(body.cached).to.eql(true);",
+                  "  pm.expect(body.history_item.cached).to.eql(true);",
+                  "  pm.expect(body.data).to.be.an('array');",
+                  "});",
+                  "console.log('CACHE_HIT_DIAGNOSTIC_MS ' + pm.response.responseTime + ' (excluded from fresh AI metrics)');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Timetable / Scheduling Evaluation",
+      "description": "C6-SCHED-01 is deterministic and non-AI. Upload and automation requests require manual file selection and may use Gemini quota. Timetable accuracy requires separate labelled ground truth.",
+      "item": [
+        {
+          "name": "C6-SCHED-01 - Export Controlled Timetable to ICS (25-run candidate)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/timetable/export-ics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "timetable",
+                "export-ics"
+              ]
+            },
+            "description": "Deterministic non-AI scheduling/export check using an inline timetable override. It should emit 14 VEVENT records for one weekly class across 14 weeks.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_email\": \"{{test_email}}\",\n  \"course_ids\": [\n    \"UCCD1024\"\n  ],\n  \"semester_start_date\": \"2026-09-07\",\n  \"courses\": [\n    {\n      \"course_id\": \"UCCD1024\",\n      \"course_name\": \"Data Structures and Algorithmic Problem Solving\",\n      \"classes\": [\n        {\n          \"type\": \"L\",\n          \"day\": \"Mon\",\n          \"start_time\": \"09:00\",\n          \"end_time\": \"11:00\",\n          \"venue\": \"KB Block\",\n          \"group\": \"1\"\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (Number(pm.info.iteration || 0) === 0) pm.collectionVariables.unset('metric_export_ics');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const text = pm.response.text();",
+                  "const contentType = pm.response.headers.get('Content-Type') || '';",
+                  "const eventCount = (text.match(/BEGIN:VEVENT/g) || []).length;",
+                  "const ok = pm.response.code === 200 && contentType.includes('text/calendar') && text.includes('BEGIN:VCALENDAR') && eventCount === 14;",
+                  "pm.test('HTTP 200 and iCalendar content type', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(contentType).to.include('text/calendar');",
+                  "});",
+                  "pm.test('Calendar contains exactly 14 weekly class events', () => {",
+                  "  pm.expect(text).to.include('BEGIN:VCALENDAR');",
+                  "  pm.expect(eventCount).to.eql(14);",
+                  "  pm.expect(text).to.include('UCCD1024');",
+                  "});",
+                  "",
+                  "function recordMetric(key, success) {",
+                  "  let metric;",
+                  "  try {",
+                  "    metric = JSON.parse(pm.collectionVariables.get(key) || '{}');",
+                  "  } catch (e) {",
+                  "    metric = {};",
+                  "  }",
+                  "  metric.runs = (metric.runs || 0) + 1;",
+                  "  metric.successful_requests = (metric.successful_requests || 0) + (success ? 1 : 0);",
+                  "  metric.failed_requests = metric.runs - metric.successful_requests;",
+                  "  metric.times_ms = Array.isArray(metric.times_ms) ? metric.times_ms : [];",
+                  "  metric.times_ms.push(pm.response.responseTime);",
+                  "  const sorted = metric.times_ms.slice().sort((a, b) => a - b);",
+                  "  metric.success_rate_percent = Number((100 * metric.successful_requests / metric.runs).toFixed(2));",
+                  "  metric.mean_ms = Number((metric.times_ms.reduce((a, b) => a + b, 0) / metric.runs).toFixed(2));",
+                  "  metric.min_ms = sorted[0];",
+                  "  metric.max_ms = sorted[sorted.length - 1];",
+                  "  metric.p95_ms = sorted[Math.max(0, Math.ceil(0.95 * sorted.length) - 1)];",
+                  "  pm.collectionVariables.set(key, JSON.stringify(metric));",
+                  "  console.log('CHAPTER6_METRIC ' + key + ' ' + JSON.stringify(metric));",
+                  "}",
+                  "recordMetric('metric_export_ics', ok);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-SCHED-02 - MANUAL/QUOTA: Timetable Image or PDF Extraction",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/timetable/upload",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "timetable",
+                "upload"
+              ]
+            },
+            "description": "Gemini multimodal request. Select one labelled timetable image/PDF in the existing image form-data field. Run once per each of five labelled samples. HTTP success and schema checks are not accuracy evidence.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "user_email",
+                  "value": "{{test_email}}",
+                  "type": "text"
+                },
+                {
+                  "key": "semester_start_date",
+                  "value": "2026-09-07",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select one labelled timetable image or PDF immediately before sending."
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body = {};",
+                  "try { body = pm.response.json(); } catch (e) {}",
+                  "const courses = body.timetable && Array.isArray(body.timetable.courses) ? body.timetable.courses : [];",
+                  "const validCourseShape = courses.every(c => typeof c.course_id === 'string' && typeof c.course_name === 'string' && Array.isArray(c.classes));",
+                  "const validClassShape = courses.every(c => c.classes.every(x =>",
+                  "  ['L','P','T'].includes(x.type) && ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].includes(x.day) &&",
+                  "  /^\\d{2}:\\d{2}$/.test(x.start_time) && /^\\d{2}:\\d{2}$/.test(x.end_time) &&",
+                  "  typeof x.venue === 'string' && typeof x.group === 'string'",
+                  "));",
+                  "const ok = pm.response.code === 200 && body.success === true && body.timetable && Array.isArray(body.timetable.courses) && validCourseShape && validClassShape;",
+                  "pm.test('HTTP 200 and success=true', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "});",
+                  "pm.test('Implemented timetable response structure is valid', () => {",
+                  "  pm.expect(body.timetable).to.be.an('object');",
+                  "  pm.expect(body.timetable.courses).to.be.an('array');",
+                  "  pm.expect(validCourseShape).to.eql(true);",
+                  "  pm.expect(validClassShape).to.eql(true);",
+                  "});",
+                  "console.log('TIMETABLE_ACCURACY_NOT_MEASURED: preserve the input file, raw JSON response, and manually labelled ground truth.');",
+                  "",
+                  "function recordMetric(key, success) {",
+                  "  let metric;",
+                  "  try {",
+                  "    metric = JSON.parse(pm.collectionVariables.get(key) || '{}');",
+                  "  } catch (e) {",
+                  "    metric = {};",
+                  "  }",
+                  "  metric.runs = (metric.runs || 0) + 1;",
+                  "  metric.successful_requests = (metric.successful_requests || 0) + (success ? 1 : 0);",
+                  "  metric.failed_requests = metric.runs - metric.successful_requests;",
+                  "  metric.times_ms = Array.isArray(metric.times_ms) ? metric.times_ms : [];",
+                  "  metric.times_ms.push(pm.response.responseTime);",
+                  "  const sorted = metric.times_ms.slice().sort((a, b) => a - b);",
+                  "  metric.success_rate_percent = Number((100 * metric.successful_requests / metric.runs).toFixed(2));",
+                  "  metric.mean_ms = Number((metric.times_ms.reduce((a, b) => a + b, 0) / metric.runs).toFixed(2));",
+                  "  metric.min_ms = sorted[0];",
+                  "  metric.max_ms = sorted[sorted.length - 1];",
+                  "  metric.p95_ms = sorted[Math.max(0, Math.ceil(0.95 * sorted.length) - 1)];",
+                  "  pm.collectionVariables.set(key, JSON.stringify(metric));",
+                  "  console.log('CHAPTER6_METRIC ' + key + ' ' + JSON.stringify(metric));",
+                  "}",
+                  "recordMetric('metric_timetable_upload', ok);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-SCHED-03 - Retrieve Saved Timetable",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/timetable?user_email={{test_email}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "timetable"
+              ],
+              "query": [
+                {
+                  "key": "user_email",
+                  "value": "{{test_email}}"
+                }
+              ]
+            },
+            "description": "Reads the timetable saved by C6-SCHED-02 for the evaluation email. Run after a successful upload.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Saved timetable response shape exists', () => {",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "  pm.expect(body.courses).to.be.an('array');",
+                  "  pm.expect(body.timetable).not.to.eql(null);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-SCHED-04 - MANUAL/QUOTA: Create 14-Week Automation from Syllabus",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/automations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "automations"
+              ]
+            },
+            "description": "Requires a syllabus PDF. If a Gemini key is configured, the syllabus parser may consume quota; otherwise the implementation returns a deterministic fallback schedule with warnings. No Google OAuth token is included.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "notebook_id",
+                  "value": "{{core_notebook_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "course_name",
+                  "value": "UCCD1024 - Data Structures and Algorithmic Problem Solving",
+                  "type": "text"
+                },
+                {
+                  "key": "user_email",
+                  "value": "{{test_email}}",
+                  "type": "text"
+                },
+                {
+                  "key": "class_day",
+                  "value": "Monday",
+                  "type": "text"
+                },
+                {
+                  "key": "class_start_time",
+                  "value": "09:00",
+                  "type": "text"
+                },
+                {
+                  "key": "class_end_time",
+                  "value": "11:00",
+                  "type": "text"
+                },
+                {
+                  "key": "semester_start_date",
+                  "value": "2026-09-07",
+                  "type": "text"
+                },
+                {
+                  "key": "total_weeks",
+                  "value": "14",
+                  "type": "text"
+                },
+                {
+                  "key": "has_break_week",
+                  "value": "false",
+                  "type": "text"
+                },
+                {
+                  "key": "primary_reminder_time",
+                  "value": "18:00",
+                  "type": "text"
+                },
+                {
+                  "key": "enable_evening_reminder",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "evening_reminder_time",
+                  "value": "21:00",
+                  "type": "text"
+                },
+                {
+                  "key": "syllabus",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select a test syllabus PDF immediately before sending."
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Automation response contains a 14-week schedule', () => {",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "  pm.expect(body.automation_id).to.exist;",
+                  "  pm.expect(body.notebook_id).to.eql(pm.collectionVariables.get('core_notebook_id'));",
+                  "  pm.expect(body.total_weeks).to.eql(14);",
+                  "  pm.expect(body.weekly_schedule).to.be.an('array').with.lengthOf(14);",
+                  "});",
+                  "pm.collectionVariables.set('automation_id', body.automation_id || '');",
+                  "console.log('SYLLABUS_SOURCE ' + body.syllabus_source + '; WARNINGS ' + JSON.stringify(body.warnings || []));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-SCHED-05 - Retrieve Automation and Calculated Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/automations/{{core_notebook_id}}?user_email={{test_email}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "automations",
+                "{{core_notebook_id}}"
+              ],
+              "query": [
+                {
+                  "key": "user_email",
+                  "value": "{{test_email}}"
+                }
+              ]
+            },
+            "description": "Reads the persisted/memory-fallback automation created by C6-SCHED-04 and validates the implemented schedule/status response shape.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Automation, history, and stats are returned', () => {",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "  pm.expect(body.automation).to.be.an('object');",
+                  "  pm.expect(body.history).to.be.an('array').with.lengthOf(14);",
+                  "  pm.expect(body.stats).to.be.an('object');",
+                  "  pm.expect(body.stats.total_weeks).to.eql(14);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 - Multiplayer REST Evaluation",
+      "description": "Run once in order. This is supplementary functionality and does not prove persistence, authoritative scoring, reconnect recovery, bonuses, XP, or 50-player capacity.",
+      "item": [
+        {
+          "name": "C6-MP-01 - Host Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/host-game",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "host-game"
+              ]
+            },
+            "description": "Supplementary functionality check. Creates an in-memory room and captures the generated six-character code.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"quiz_data\": [\n    {\n      \"question\": \"Which structure follows FIFO?\",\n      \"options\": [\n        \"Stack\",\n        \"Queue\",\n        \"Tree\",\n        \"Heap\"\n      ],\n      \"answer\": \"Queue\"\n    },\n    {\n      \"question\": \"Which search commonly uses a queue?\",\n      \"options\": [\n        \"DFS\",\n        \"BFS\",\n        \"Binary search\",\n        \"Linear search\"\n      ],\n      \"answer\": \"BFS\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.variables.replaceIn('{{$guid}}').slice(0, 8);",
+                  "pm.collectionVariables.set('player_a', 'PlayerA-' + id);",
+                  "pm.collectionVariables.set('player_b', 'PlayerB-' + id);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Six-character room code exists', () => pm.expect(body.code).to.match(/^[A-Z0-9]{6}$/));",
+                  "pm.collectionVariables.set('room_code', body.code);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-MP-02 - Join {{player_a}}",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/join-game",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "join-game"
+              ]
+            },
+            "description": "Joins the waiting room and returns the host-supplied quiz_data.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{room_code}}\",\n  \"name\": \"{{player_a}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Join succeeds and quiz data is returned', () => {",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "  pm.expect(body.quiz_data).to.be.an('array').with.lengthOf(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-MP-03 - Join {{player_b}}",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/join-game",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "join-game"
+              ]
+            },
+            "description": "Joins the waiting room and returns the host-supplied quiz_data.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{room_code}}\",\n  \"name\": \"{{player_b}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Join succeeds and quiz data is returned', () => {",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "  pm.expect(body.quiz_data).to.be.an('array').with.lengthOf(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-MP-04 - Poll Waiting State",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/get-game-status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "get-game-status"
+              ]
+            },
+            "description": "Confirms the room is waiting and both generated player names are present.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{room_code}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Waiting state contains both players', () => {",
+                  "  pm.expect(body.status).to.eql('waiting');",
+                  "  pm.expect(body.players).to.include(pm.collectionVariables.get('player_a'));",
+                  "  pm.expect(body.players).to.include(pm.collectionVariables.get('player_b'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-MP-05 - Start Game",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/start-game",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "start-game"
+              ]
+            },
+            "description": "Changes the in-memory room state from waiting to playing.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{room_code}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Start succeeds', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-MP-06 - Poll Playing State",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/get-game-status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "get-game-status"
+              ]
+            },
+            "description": "Confirms clients can observe the shared playing state.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{room_code}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('State is playing', () => pm.expect(body.status).to.eql('playing'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-MP-07 - Submit Score 700 for {{player_a}}",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/update-score",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "update-score"
+              ]
+            },
+            "description": "Stores the client-submitted score in the in-memory room. This does not prove server-side answer validation.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{room_code}}\",\n  \"name\": \"{{player_a}}\",\n  \"score\": 700\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Score update succeeds', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-MP-08 - Submit Score 900 for {{player_b}}",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/update-score",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "update-score"
+              ]
+            },
+            "description": "Stores the client-submitted score in the in-memory room. This does not prove server-side answer validation.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{room_code}}\",\n  \"name\": \"{{player_b}}\",\n  \"score\": 900\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Score update succeeds', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C6-MP-09 - Retrieve Ordered Leaderboard",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/get-leaderboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "get-leaderboard"
+              ]
+            },
+            "description": "Validates descending ordering of the two client-submitted scores. The room is in memory and is lost on backend restart.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{room_code}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const a = pm.collectionVariables.get('player_a');",
+                  "const b = pm.collectionVariables.get('player_b');",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Leaderboard is descending with submitted values', () => {",
+                  "  pm.expect(body.status).to.eql('playing');",
+                  "  pm.expect(body.leaderboard).to.be.an('array').with.lengthOf(2);",
+                  "  pm.expect(body.leaderboard[0]).to.deep.equal({name: b, score: 900});",
+                  "  pm.expect(body.leaderboard[1]).to.deep.equal({name: a, score: 700});",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "run_id",
+      "value": ""
+    },
+    {
+      "key": "test_email",
+      "value": ""
+    },
+    {
+      "key": "core_notebook_id",
+      "value": ""
+    },
+    {
+      "key": "core_source_id",
+      "value": ""
+    },
+    {
+      "key": "core_mistake_question",
+      "value": ""
+    },
+    {
+      "key": "ai_run_id",
+      "value": ""
+    },
+    {
+      "key": "ai_test_email",
+      "value": ""
+    },
+    {
+      "key": "ai_notebook_id",
+      "value": ""
+    },
+    {
+      "key": "ai_source_id",
+      "value": ""
+    },
+    {
+      "key": "automation_id",
+      "value": ""
+    },
+    {
+      "key": "room_code",
+      "value": ""
+    },
+    {
+      "key": "player_a",
+      "value": ""
+    },
+    {
+      "key": "player_b",
+      "value": ""
+    }
+  ]
+}
