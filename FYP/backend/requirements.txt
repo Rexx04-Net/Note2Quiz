@@ -4,7 +4,8 @@ google-generativeai
 pypdf
 python-pptx
 youtube-transcript-api
-pymongo
+pymongo[srv]
+dnspython
 apscheduler
 google-api-python-client
 google-auth-oauthlib
