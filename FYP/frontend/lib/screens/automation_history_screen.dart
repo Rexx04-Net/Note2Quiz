@@ -148,30 +148,24 @@ class _AutomationHistoryScreenState extends State<AutomationHistoryScreen> {
       ),
     );
 
-      if (result != null && result is Map) {
-        try {
-          await http.post(
-            Uri.parse('$baseUrl/api/automations/quiz-completed'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'notebook_id': widget.notebookId,
-              'week_number': weekNumber,
-              'user_email': widget.userEmail,
-              'score': result['correct_answers'] ?? 0,
-              'total_questions': result['total_questions'] ?? 2,
-            }),
-          );
-        } catch (_) {}
-      }
-
-      // Refresh history upon return if quiz was completed
-      _fetchAutomationHistory();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error launching quiz: $e")),
-      );
+    if (result != null && result is Map) {
+      try {
+        await http.post(
+          Uri.parse('$baseUrl/api/automations/quiz-completed'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'notebook_id': widget.notebookId,
+            'week_number': weekNumber,
+            'user_email': widget.userEmail,
+            'score': result['correct_answers'] ?? 0,
+            'total_questions': result['total_questions'] ?? 2,
+          }),
+        );
+      } catch (_) {}
     }
+
+    // Refresh history upon return if quiz was completed
+    _fetchAutomationHistory();
   }
 
   static const _months = [
