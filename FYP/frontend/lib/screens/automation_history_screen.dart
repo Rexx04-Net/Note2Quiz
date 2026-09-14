@@ -82,55 +82,71 @@ class _AutomationHistoryScreenState extends State<AutomationHistoryScreen> {
   }
 
   Future<void> _launchRevisionQuiz(int weekNumber, String topicTitle) async {
+    List<dynamic> quizData = [];
+    bool dialogShown = false;
+
     try {
       showDialog(
         context: context,
-        barrierDismissible: false,
+        barrierDismissible: true,
         builder: (ctx) => const Center(child: CircularProgressIndicator()),
       );
+      dialogShown = true;
 
       final uri = Uri.parse(
         '$baseUrl/api/automations/revision-quiz?notebook_id=${widget.notebookId}&week_number=$weekNumber',
       );
-      final resp = await http.get(uri);
-      if (!mounted) return;
-      Navigator.pop(context); // dismiss loading dialog
+      final resp = await http.get(uri).timeout(const Duration(seconds: 5));
 
-      List<dynamic> quizData = [];
+      if (dialogShown && mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        dialogShown = false;
+      }
+
       if (resp.statusCode == 200) {
         final body = json.decode(resp.body);
         if (body['success'] == true && body['quiz_data'] != null) {
           quizData = body['quiz_data'];
         }
       }
-
-      if (quizData.isEmpty) {
-        quizData = [
-          {
-            "question": "Scheduled Revision Quiz - Week $weekNumber: $topicTitle",
-            "options": [
-              "Mastering key principles of $topicTitle",
-              "Skipping foundational review",
-              "Outdated legacy concepts",
-              "Unrelated theoretical notes"
-            ],
-            "answer": "Mastering key principles of $topicTitle",
-            "hint": "Focus on core concepts for this week."
-          }
-        ];
+    } catch (e) {
+      if (dialogShown && mounted) {
+        try {
+          Navigator.of(context, rootNavigator: true).pop();
+        } catch (_) {}
+        dialogShown = false;
       }
+      debugPrint("Quiz fetch error: $e");
+    }
 
-      final result = await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => QuizScreen(
-            quizData: quizData,
-            notebookId: widget.notebookId,
-            weekNumber: weekNumber,
-            userEmail: widget.userEmail,
-          ),
+    if (quizData.isEmpty) {
+      quizData = [
+        {
+          "question": "Scheduled Revision Quiz - Week $weekNumber: $topicTitle",
+          "options": [
+            "Mastering key principles of $topicTitle",
+            "Skipping foundational review",
+            "Outdated legacy concepts",
+            "Unrelated theoretical notes"
+          ],
+          "answer": "Mastering key principles of $topicTitle",
+          "hint": "Focus on core concepts for this week."
+        }
+      ];
+    }
+
+    if (!mounted) return;
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => QuizScreen(
+          quizData: quizData,
+          notebookId: widget.notebookId,
+          weekNumber: weekNumber,
+          userEmail: widget.userEmail,
         ),
-      );
+      ),
+    );
 
       if (result != null && result is Map) {
         try {
