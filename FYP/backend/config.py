@@ -15,15 +15,15 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyBvBbiuhYkuxf9uLNvx7RhuGIot3R-zaqo")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 if not GEMINI_API_KEY:
     try:
         from api_secrets import GEMINI_API_KEY as SECRET_KEY
         GEMINI_API_KEY = SECRET_KEY
     except ImportError:
-        GEMINI_API_KEY = "AIzaSyBvBbiuhYkuxf9uLNvx7RhuGIot3R-zaqo"
+        pass
 
-MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb+srv://yanwaitham_db_user:CygJCCCqJKzDQq2s@cluster0.hroiec5.mongodb.net/note2quiz_db?retryWrites=true&w=majority&appName=Cluster0")
+MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/")
 DB_NAME = os.environ.get("DB_NAME", "note2quiz_db")
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
@@ -38,8 +38,8 @@ if not GOOGLE_CLIENT_ID:
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
-SMTP_USERNAME = os.environ.get("SMTP_USERNAME") or "yanwaitham@gmail.com"
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD") or "ayonlzqjyyarvqwh"
+SMTP_USERNAME = os.environ.get("SMTP_USERNAME", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 
 DEFAULT_TIMEZONE = os.environ.get("DEFAULT_TIMEZONE", "Asia/Kuala_Lumpur")
 REVISION_DELAY_HOURS = int(os.environ.get("REVISION_DELAY_HOURS", 24))
