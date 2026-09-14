@@ -122,8 +122,16 @@ class _TimetableScannerScreenState extends State<TimetableScannerScreen> {
           _showSnackBar(data['error'] ?? "Failed to parse timetable.", isError: true);
         }
       } else {
-        final err = jsonDecode(response.body);
-        _showSnackBar(err['error'] ?? "Server error while processing timetable.", isError: true);
+        String errMsg = "Server error (${response.statusCode})";
+        try {
+          final err = jsonDecode(response.body);
+          if (err is Map && err['error'] != null) {
+            errMsg = err['error'].toString();
+          }
+        } catch (_) {
+          errMsg = "Server returned error ${response.statusCode}. Please try again.";
+        }
+        _showSnackBar(errMsg, isError: true);
       }
     } catch (e) {
       _showSnackBar("Upload error: $e", isError: true);

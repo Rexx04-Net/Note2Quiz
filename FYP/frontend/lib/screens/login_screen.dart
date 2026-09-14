@@ -45,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } catch (e) {
-      _showError("Google Sign-In Failed. Check console for details.");
+      _showError("Google Sign-In Failed: $e");
       debugPrint("Error: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);

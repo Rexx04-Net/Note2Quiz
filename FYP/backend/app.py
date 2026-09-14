@@ -53,27 +53,53 @@ def root_index():
 def health_check():
     return jsonify({"status": "healthy"}), 200
 
-# Register Automation & Timetable Blueprints
+# 1. Register Timetable Blueprint
+try:
+    from blueprints.timetable import timetable_bp
+    app.register_blueprint(timetable_bp)
+    print("✅ [Timetable Blueprint] Successfully registered.")
+except Exception as tb_err:
+    print(f"⚠️ [Timetable Blueprint] Registration error: {tb_err}")
+
+# 2. Register Automation Blueprint
 try:
     from blueprints.automation import automation_bp
-    from blueprints.timetable import timetable_bp
+    app.register_blueprint(automation_bp)
+    print("✅ [Automation Blueprint] Successfully registered.")
+except Exception as auto_err:
+    print(f"⚠️ [Automation Blueprint] Registration error: {auto_err}")
+
+# 3. Database Indexes
+try:
     from database.indexes import init_indexes
+    init_indexes()
+except Exception as idx_err:
+    print(f"⚠️ [Indexes] Init error: {idx_err}")
+
+# 4. Background Scheduler
+try:
     from jobs.notifier import check_and_send_due_notifications
     from apscheduler.schedulers.background import BackgroundScheduler
     import atexit
 
-    app.register_blueprint(automation_bp)
-    app.register_blueprint(timetable_bp)
-    init_indexes()
-
-    # Initialize APScheduler for notification polling
     scheduler = BackgroundScheduler()
     scheduler.add_job(func=check_and_send_due_notifications, trigger="interval", seconds=10, id="notifier_job")
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown(wait=False))
     print("✅ [Scheduler] APScheduler background worker started successfully (polling every 10s).")
-except Exception as bp_err:
-    print(f"⚠️ [Automation Blueprint] Initialization error: {bp_err}")
+except Exception as sched_err:
+    print(f"⚠️ [Scheduler] Background worker error: {sched_err}")
+
+@app.route('/debug/routes', methods=['GET'])
+def debug_routes():
+    routes = [f"{list(rule.methods)} {rule.rule}" for rule in app.url_map.iter_rules()]
+    return jsonify({
+        "status": "online",
+        "blueprints": list(app.blueprints.keys()),
+        "total_routes": len(routes),
+        "routes": sorted(routes)
+    }), 200
+
 
 
 # --- FILE STORAGE FOR LOCAL PERSISTENCE ---
