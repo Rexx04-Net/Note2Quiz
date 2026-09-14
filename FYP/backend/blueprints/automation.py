@@ -414,6 +414,8 @@ def trigger_automation_now(notebook_id):
     topic_title = target_item.get("topic_title", f"Week {week_num} Topic")
 
     from services.notification_service import send_revision_email
+    email_delivered = False
+    email_warning = None
     try:
         send_revision_email(
             user_email=target_email,
@@ -423,8 +425,11 @@ def trigger_automation_now(notebook_id):
             notebook_id=notebook_id,
             is_evening_reminder=False
         )
+        email_delivered = True
     except Exception as e:
-        return jsonify({"success": False, "error": f"Failed to send email: {str(e)}"}), 500
+        email_delivered = False
+        email_warning = str(e)
+        print(f"⚠️ [Email Trigger] Outbound email warning: {e}")
 
     past_time = now_utc - datetime.timedelta(seconds=5)
     target_item["status"] = "REMINDER_SENT"
@@ -451,12 +456,21 @@ def trigger_automation_now(notebook_id):
             }}
         )
     else:
-        auto["next_scheduled_trigger"] = stats.get("next_scheduled_trigger")
+        memory_automations[f"{notebook_id}_{target_email}"]["weekly_schedule"] = weekly_schedule
+        memory_automations[f"{notebook_id}_{target_email}"]["next_scheduled_trigger"] = stats.get("next_scheduled_trigger")
+        memory_automations[f"{notebook_id}_{target_email}"]["updated_at"] = now_utc.isoformat()
         save_memory_automations()
+
+    success_msg = f"Revision alert for Week {week_num} triggered!"
+    if email_delivered:
+        success_msg += f" Email delivered to {target_email}."
+    else:
+        success_msg += f" (In-app alert activated; cloud host restricted raw SMTP: {email_warning})"
 
     return jsonify({
         "success": True,
-        "message": f"Revision alert for Week {week_num} ({topic_title}) sent to {target_email}!"
+        "message": success_msg,
+        "email_delivered": email_delivered
     }), 200
 
 @automation_bp.route("/api/automations/quiz-completed", methods=["POST"])

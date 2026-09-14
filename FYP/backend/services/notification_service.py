@@ -77,9 +77,30 @@ def send_revision_email(user_email, course_name, week_number, topic_title, noteb
     msg["To"] = user_email
     msg.attach(MIMEText(html_body, "html"))
 
-    with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=10) as server:
-        server.starttls()
-        server.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
-        server.sendmail(config.SMTP_USERNAME, user_email, msg.as_string())
+    email_sent = False
+    last_err = None
+
+    # 1. Try SSL (port 465) first (frequently permitted when 587 is blocked)
+    try:
+        with smtplib.SMTP_SSL(config.SMTP_HOST, 465, timeout=5) as server:
+            server.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
+            server.sendmail(config.SMTP_USERNAME, user_email, msg.as_string())
+            email_sent = True
+    except Exception as e_ssl:
+        last_err = e_ssl
+
+    # 2. Fallback to TLS (port 587)
+    if not email_sent:
+        try:
+            with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=5) as server:
+                server.starttls()
+                server.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
+                server.sendmail(config.SMTP_USERNAME, user_email, msg.as_string())
+                email_sent = True
+        except Exception as e_tls:
+            last_err = e_tls
+
+    if not email_sent:
+        raise last_err
 
     return True
