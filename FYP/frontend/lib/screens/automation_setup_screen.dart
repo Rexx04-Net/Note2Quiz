@@ -28,6 +28,7 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
 
   late TextEditingController _courseNameController;
   late TextEditingController _emailController;
+  final FocusNode _courseFocusNode = FocusNode();
 
   // Notebook selection state
   List<dynamic> _userNotebooks = [];
@@ -202,6 +203,18 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
 
         _autoTimingSummary = "$_selectedDay at ${_formatTimeOfDay(_endTime)}";
       }
+
+      // Automatically sync target notebook if user has a notebook for this course
+      final matchCid = cid.toUpperCase().trim();
+      final matchCname = cname.toUpperCase().trim();
+      for (var nb in _userNotebooks) {
+        final nbTitle = (nb['title'] ?? '').toString().toUpperCase().trim();
+        if ((matchCid.isNotEmpty && nbTitle.contains(matchCid)) ||
+            (matchCname.isNotEmpty && nbTitle.contains(matchCname))) {
+          _selectedNotebookId = nb['id'].toString();
+          break;
+        }
+      }
     });
   }
 
@@ -209,6 +222,7 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
   void dispose() {
     _courseNameController.dispose();
     _emailController.dispose();
+    _courseFocusNode.dispose();
     super.dispose();
   }
 
@@ -735,101 +749,280 @@ class _AutomationSetupScreenState extends State<AutomationSetupScreen> {
                     const SizedBox(height: 12),
                   ],
 
-                  TextFormField(
-                    controller: _courseNameController,
-                    decoration: InputDecoration(
-                      labelText: "Course Name / Code",
-                      prefixIcon: const Icon(Icons.book_outlined),
-                      suffixIcon: _userNotebooks.isNotEmpty
-                          ? PopupMenuButton<dynamic>(
-                              tooltip: "Select from My Notebooks (${_userNotebooks.length})",
-                              icon: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                margin: const EdgeInsets.only(right: 6),
-                                decoration: BoxDecoration(
-                                  color: scheme.primary.withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(10),
+                  RawAutocomplete<Map<String, dynamic>>(
+                    textEditingController: _courseNameController,
+                    focusNode: _courseFocusNode,
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      final query = textEditingValue.text.toLowerCase().trim();
+                      if (query.isEmpty) {
+                        return const Iterable<Map<String, dynamic>>.empty();
+                      }
+                      final List<Map<String, dynamic>> results = [];
+                      final seen = <String>{};
+
+                      // 1. Check user's notebooks
+                      for (var nb in _userNotebooks) {
+                        final title = (nb['title'] ?? '').toString();
+                        if (title.toLowerCase().contains(query)) {
+                          final id = nb['id']?.toString() ?? '';
+                          if (!seen.contains(id)) {
+                            seen.add(id);
+                            final srcCount = (nb['sources'] as List<dynamic>? ?? []).length;
+                            results.add({
+                              'type': 'notebook',
+                              'id': id,
+                              'title': title,
+                              'subtitle': '$srcCount source${srcCount == 1 ? '' : 's'} (Notebook)',
+                              'raw': nb,
+                            });
+                          }
+                        }
+                      }
+
+                      // 2. Check scanned timetable courses
+                      for (var c in _timetableCourses) {
+                        final cid = (c['course_id'] ?? '').toString();
+                        final cname = (c['course_name'] ?? '').toString();
+                        final full = "$cid - $cname";
+                        if (full.toLowerCase().contains(query) ||
+                            cid.toLowerCase().contains(query) ||
+                            cname.toLowerCase().contains(query)) {
+                          if (!seen.contains(cid)) {
+                            seen.add(cid);
+                            final classCount = (c['classes'] as List<dynamic>? ?? []).length;
+                            results.add({
+                              'type': 'timetable',
+                              'id': cid,
+                              'title': full,
+                              'subtitle': '$classCount weekly classes (Scanned Timetable)',
+                              'raw': c,
+                            });
+                          }
+                        }
+                      }
+                      return results;
+                    },
+                    displayStringForOption: (option) => option['title'] as String,
+                    onSelected: (Map<String, dynamic> option) {
+                      if (option['type'] == 'notebook') {
+                        final nb = option['raw'];
+                        setState(() {
+                          _selectedNotebookId = nb['id']?.toString() ?? '';
+                          _courseNameController.text = nb['title']?.toString() ?? '';
+                          final titleUpper = (nb['title'] ?? '').toString().toUpperCase().trim();
+                          dynamic matched;
+                          for (var c in _timetableCourses) {
+                            final cid = (c['course_id'] ?? '').toString().toUpperCase().trim();
+                            final cname = (c['course_name'] ?? '').toString().toUpperCase().trim();
+                            if (titleUpper.isNotEmpty &&
+                                (titleUpper.contains(cid) ||
+                                    titleUpper.contains(cname) ||
+                                    (cid.isNotEmpty && cid.contains(titleUpper)))) {
+                              matched = c;
+                              break;
+                            }
+                          }
+                          if (matched != null) {
+                            _onSelectTimetableCourse(matched);
+                          } else {
+                            _selectedLinkedCourseId = null;
+                            _useManualTiming = true;
+                            _autoTimingSummary = null;
+                          }
+                        });
+                      } else if (option['type'] == 'timetable') {
+                        final c = option['raw'];
+                        _onSelectTimetableCourse(c);
+                      }
+                    },
+                    optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Map<String, dynamic>> onSelected, Iterable<Map<String, dynamic>> options) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 14,
+                          borderRadius: BorderRadius.circular(14),
+                          color: colors.surfaceAlt,
+                          child: Container(
+                            width: 500,
+                            constraints: const BoxConstraints(maxHeight: 280),
+                            decoration: BoxDecoration(
+                              color: colors.surfaceAlt,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: scheme.primary.withValues(alpha: 0.35)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 8),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.folder_open_rounded, size: 16, color: scheme.primary),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      "Select Notebook",
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: scheme.primary,
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.auto_awesome, color: scheme.primary, size: 14),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        "MATCHING COURSES (${options.length}) — TAP TO AUTO-FILL",
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: scheme.primary,
+                                          letterSpacing: 0.8,
+                                        ),
                                       ),
-                                    ),
-                                    Icon(Icons.arrow_drop_down_rounded, size: 20, color: scheme.primary),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              onSelected: (nb) {
-                                setState(() {
-                                  _selectedNotebookId = nb['id']?.toString() ?? '';
-                                  _courseNameController.text = nb['title']?.toString() ?? '';
-                                  final titleUpper = (nb['title'] ?? '').toString().toUpperCase().trim();
-                                  dynamic matched;
-                                  for (var c in _timetableCourses) {
-                                    final cid = (c['course_id'] ?? '').toString().toUpperCase().trim();
-                                    final cname = (c['course_name'] ?? '').toString().toUpperCase().trim();
-                                    if (titleUpper.isNotEmpty &&
-                                        (titleUpper.contains(cid) ||
-                                            titleUpper.contains(cname) ||
-                                            (cid.isNotEmpty && cid.contains(titleUpper)))) {
-                                      matched = c;
-                                      break;
-                                    }
-                                  }
-                                  if (matched != null) {
-                                    _onSelectTimetableCourse(matched);
-                                  } else {
-                                    _selectedLinkedCourseId = null;
-                                    _useManualTiming = true;
-                                    _autoTimingSummary = null;
-                                  }
-                                });
-                              },
-                              itemBuilder: (context) {
-                                return _userNotebooks.map((nb) {
-                                  final title = nb['title']?.toString() ?? 'Notebook';
-                                  final sources = (nb['sources'] as List<dynamic>? ?? []).length;
-                                  return PopupMenuItem<dynamic>(
-                                    value: nb,
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.folder_special_rounded, color: Color(0xFF6C63FF), size: 20),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                title,
-                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                              Text(
-                                                "$sources source${sources == 1 ? '' : 's'} available",
-                                                style: const TextStyle(fontSize: 11, color: Colors.grey),
-                                              ),
-                                            ],
+                                const Divider(height: 1),
+                                Flexible(
+                                  child: ListView.builder(
+                                    padding: EdgeInsets.zero,
+                                    shrinkWrap: true,
+                                    itemCount: options.length,
+                                    itemBuilder: (BuildContext context, int index) {
+                                      final option = options.elementAt(index);
+                                      final isNotebook = option['type'] == 'notebook';
+                                      return ListTile(
+                                        dense: true,
+                                        leading: Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: (isNotebook ? const Color(0xFF6C63FF) : const Color(0xFF00B4D8)).withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Icon(
+                                            isNotebook ? Icons.folder_special_rounded : Icons.calendar_month_rounded,
+                                            color: isNotebook ? const Color(0xFF6C63FF) : const Color(0xFF00B4D8),
+                                            size: 18,
                                           ),
                                         ),
+                                        title: Text(
+                                          option['title'] as String,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        subtitle: Text(
+                                          option['subtitle'] as String,
+                                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                        ),
+                                        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Colors.grey),
+                                        onTap: () => onSelected(option),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    fieldViewBuilder: (BuildContext context, TextEditingController textEditingController, FocusNode focusNode, VoidCallback onFieldSubmitted) {
+                      return TextFormField(
+                        controller: textEditingController,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          labelText: "Course Name / Code (Type to search & auto-fill)",
+                          hintText: "e.g. Data Structure, UCCD1024...",
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          suffixIcon: _userNotebooks.isNotEmpty
+                              ? PopupMenuButton<dynamic>(
+                                  tooltip: "Select from My Notebooks (${_userNotebooks.length})",
+                                  icon: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    margin: const EdgeInsets.only(right: 6),
+                                    decoration: BoxDecoration(
+                                      color: scheme.primary.withValues(alpha: 0.14),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.folder_open_rounded, size: 16, color: scheme.primary),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          "Select Notebook",
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: scheme.primary,
+                                          ),
+                                        ),
+                                        Icon(Icons.arrow_drop_down_rounded, size: 20, color: scheme.primary),
                                       ],
                                     ),
-                                  );
-                                }).toList();
-                              },
-                            )
-                          : null,
-                      border: const OutlineInputBorder(),
-                    ),
-                    validator: (v) => v == null || v.trim().isEmpty ? "Course name required" : null,
+                                  ),
+                                  onSelected: (nb) {
+                                    setState(() {
+                                      _selectedNotebookId = nb['id']?.toString() ?? '';
+                                      _courseNameController.text = nb['title']?.toString() ?? '';
+                                      final titleUpper = (nb['title'] ?? '').toString().toUpperCase().trim();
+                                      dynamic matched;
+                                      for (var c in _timetableCourses) {
+                                        final cid = (c['course_id'] ?? '').toString().toUpperCase().trim();
+                                        final cname = (c['course_name'] ?? '').toString().toUpperCase().trim();
+                                        if (titleUpper.isNotEmpty &&
+                                            (titleUpper.contains(cid) ||
+                                                titleUpper.contains(cname) ||
+                                                (cid.isNotEmpty && cid.contains(titleUpper)))) {
+                                          matched = c;
+                                          break;
+                                        }
+                                      }
+                                      if (matched != null) {
+                                        _onSelectTimetableCourse(matched);
+                                      } else {
+                                        _selectedLinkedCourseId = null;
+                                        _useManualTiming = true;
+                                        _autoTimingSummary = null;
+                                      }
+                                    });
+                                  },
+                                  itemBuilder: (context) {
+                                    return _userNotebooks.map((nb) {
+                                      final title = nb['title']?.toString() ?? 'Notebook';
+                                      final sources = (nb['sources'] as List<dynamic>? ?? []).length;
+                                      return PopupMenuItem<dynamic>(
+                                        value: nb,
+                                        child: Row(
+                                          children: [
+                                            const Icon(Icons.folder_special_rounded, color: Color(0xFF6C63FF), size: 20),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    title,
+                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                  Text(
+                                                    "$sources source${sources == 1 ? '' : 's'} available",
+                                                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList();
+                                  },
+                                )
+                              : null,
+                          border: const OutlineInputBorder(),
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty ? "Course name required" : null,
+                      );
+                    },
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
