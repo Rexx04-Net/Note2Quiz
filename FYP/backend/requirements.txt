@@ -13,3 +13,6 @@ pytz
 python-dotenv
 ics
 gunicorn>=21.2.0
+requests
+Pillow
+python-docx

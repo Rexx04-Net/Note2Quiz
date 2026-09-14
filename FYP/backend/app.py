@@ -53,12 +53,16 @@ def root_index():
 def health_check():
     return jsonify({"status": "healthy"}), 200
 
+tb_error = None
+auto_error = None
+
 # 1. Register Timetable Blueprint
 try:
     from blueprints.timetable import timetable_bp
     app.register_blueprint(timetable_bp)
     print("✅ [Timetable Blueprint] Successfully registered.")
 except Exception as tb_err:
+    tb_error = str(tb_err)
     print(f"⚠️ [Timetable Blueprint] Registration error: {tb_err}")
 
 # 2. Register Automation Blueprint
@@ -67,6 +71,7 @@ try:
     app.register_blueprint(automation_bp)
     print("✅ [Automation Blueprint] Successfully registered.")
 except Exception as auto_err:
+    auto_error = str(auto_err)
     print(f"⚠️ [Automation Blueprint] Registration error: {auto_err}")
 
 # 3. Database Indexes
@@ -97,6 +102,8 @@ def debug_routes():
         "status": "online",
         "blueprints": list(app.blueprints.keys()),
         "total_routes": len(routes),
+        "timetable_error": tb_error,
+        "automation_error": auto_error,
         "routes": sorted(routes)
     }), 200
 
