@@ -6,7 +6,6 @@ venv/
 env/
 .env
 .DS_Store
-config.py
 api_secrets.py  
 
 # --- FLUTTER FRONTEND ---

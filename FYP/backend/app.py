@@ -62,7 +62,8 @@ try:
     app.register_blueprint(timetable_bp)
     print("✅ [Timetable Blueprint] Successfully registered.")
 except Exception as tb_err:
-    tb_error = str(tb_err)
+    import traceback
+    tb_error = traceback.format_exc()
     print(f"⚠️ [Timetable Blueprint] Registration error: {tb_err}")
 
 # 2. Register Automation Blueprint
@@ -71,7 +72,8 @@ try:
     app.register_blueprint(automation_bp)
     print("✅ [Automation Blueprint] Successfully registered.")
 except Exception as auto_err:
-    auto_error = str(auto_err)
+    import traceback
+    auto_error = traceback.format_exc()
     print(f"⚠️ [Automation Blueprint] Registration error: {auto_err}")
 
 # 3. Database Indexes
