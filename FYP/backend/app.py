@@ -795,11 +795,18 @@ def create_notebook():
 
 @app.route('/get-notebooks', methods=['POST'])
 def get_notebooks():
-    email = request.json.get('email', 'guest')
-    if USING_MONGO:
-        notebooks = list(notebooks_col.find({"user_email": email}, {"_id": 0}))
+    data = request.json or {}
+    email = data.get('email', 'guest')
+    if isinstance(email, str):
+        email = email.strip()
     else:
-        notebooks = [n for n in memory_notebooks if n['user_email'] == email]
+        email = 'guest'
+    if USING_MONGO:
+        import re
+        email_reg = re.compile(rf"^{re.escape(email)}$", re.IGNORECASE)
+        notebooks = list(notebooks_col.find({"user_email": email_reg}, {"_id": 0}))
+    else:
+        notebooks = [n for n in memory_notebooks if n.get('user_email', '').strip().lower() == email.lower()]
     return jsonify(notebooks)
 
 @app.route('/add-source', methods=['POST'])

@@ -824,7 +824,7 @@ def auto_create_notebooks():
     doc = None
     if col is not None:
         try:
-            doc = col.find_one({"user_email": user_email})
+            doc = col.find_one({"user_email": {"$regex": f"^{re.escape(user_email)}$", "$options": "i"}})
         except Exception:
             pass
 
@@ -876,7 +876,7 @@ def auto_create_notebooks():
 
         new_nb = {
             "id": str(uuid.uuid4()),
-            "user_email": user_email,
+            "user_email": user_email.strip().lower(),
             "title": title,
             "sources": [],
             "created_at": str(datetime.datetime.now())
