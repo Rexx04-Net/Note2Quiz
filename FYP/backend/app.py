@@ -166,12 +166,11 @@ if GEMINI_API_KEY:
 TASK_MODEL_PROFILES = {
     # 1. Complex Structure & Deep Reasoning (Active AI Roadmaps, Timetable OCR & Parsing, Comprehensive Study Guides)
     "complex_structure": [
-        "gemini-2.5-pro",          # Top Pro-tier reasoning & schema compliance on free tier
         "gemini-3.7-flash",        # Latest stable flagship with deep reasoning
-        "gemini-3.6-flash",
         "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-pro",
         "gemini-2.5-flash",
-        "gemini-3-flash-preview",
     ],
     # 2. Ultra-Fast Lightweight & Interactive (Flashcards, Mind Maps, Executive Briefings, Chat Stream, Instant Hints)
     "fast_interactive": [

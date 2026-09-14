@@ -121,12 +121,11 @@ Return ONLY a valid JSON object matching this exact schema, with no markdown fen
 """
 
     models_to_try = [
-        'gemini-2.5-pro',
+        'gemini-3.7-flash',
+        'gemini-3.5-flash-lite',
         'gemini-2.5-flash',
-        'gemini-2.0-flash',
-        'gemini-2.5-flash-lite',
-        'gemini-1.5-pro',
-        'gemini-1.5-flash'
+        'gemini-3.1-pro',
+        'gemini-3-flash'
     ]
 
     # Convert to PIL Image for maximum compatibility with Gemini Vision
