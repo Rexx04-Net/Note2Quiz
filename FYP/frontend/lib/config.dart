@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 // 2. Local Wi-Fi on Phone (LAN IP): http://<IP>:5000
 // 3. Android Emulator: http://10.0.2.2:5000
 // 4. Live Cloud Production Web (Vercel / Firebase): points to Render Cloud Backend
-const String cloudBackendUrl = 'https://note2quiz-mrc3.onrender.com';
+const String cloudBackendUrl = 'https://note2quiz-nrc3.onrender.com';
 
 String getBaseUrl() {
   if (kIsWeb) {
